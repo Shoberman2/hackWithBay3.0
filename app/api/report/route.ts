@@ -20,6 +20,7 @@ import { env, isDemoMode } from "@/lib/env";
 import type { GraphLink, GraphNode } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 function debugLog(...args: unknown[]): void {
   if (env.DEBUG) {

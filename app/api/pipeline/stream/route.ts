@@ -12,6 +12,10 @@ import { env } from "@/lib/env";
 import { runPipeline } from "@/lib/pipeline/conductor";
 
 export const dynamic = "force-dynamic";
+// The live pipeline (discover -> extract in sequential LLM batches) can run
+// 1-2 minutes for a fresh idea; allow the platform max so the SSE stream is
+// not cut off mid-assembly on a serverless deploy.
+export const maxDuration = 300;
 
 const PING_INTERVAL_MS = 15_000;
 

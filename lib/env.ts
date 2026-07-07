@@ -32,7 +32,7 @@ export const env = {
 
   // RocketRide
   ROCKETRIDE_APIKEY: read("ROCKETRIDE_APIKEY"),
-  ROCKETRIDE_URI: read("ROCKETRIDE_URI") ?? "https://cloud.rocketride.ai",
+  ROCKETRIDE_URI: read("ROCKETRIDE_URI") ?? "https://api.rocketride.ai",
   // The deployed pipeline's HTTP webhook trigger URL (from a one-click deploy
   // to cloud.rocketride.ai). When set, this is the managed production endpoint
   // the app POSTs to — no local .pipe upload. URL includes ?auth=<public token>.

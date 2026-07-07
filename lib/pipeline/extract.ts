@@ -167,19 +167,35 @@ const relationshipSchema = z.object({
   source_url: z.string().min(1),
 });
 
+/**
+ * An array that drops only its invalid elements instead of failing the
+ * whole object. One malformed funding round (e.g. a missing round_type)
+ * must not discard every valid company, founder, and relationship the
+ * model found in the same batch — that silently thins live graphs.
+ */
+function lenientArray<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess(
+    (val) =>
+      Array.isArray(val)
+        ? val.filter((item) => schema.safeParse(item).success)
+        : [],
+    z.array(schema).default([]),
+  );
+}
+
 export const extractedBatchSchema = z.object({
-  companies: z.array(companySchema).default([]),
-  founders: z.array(founderSchema).default([]),
-  investors: z.array(investorSchema).default([]),
-  features: z.array(featureSchema).default([]),
-  launches: z.array(launchSchema).default([]),
-  segments: z.array(segmentSchema).default([]),
-  funding_rounds: z.array(fundingRoundSchema).default([]),
-  snapshots: z.array(snapshotSchema).default([]),
-  posts: z.array(postSchema).default([]),
-  moat_claims: z.array(moatClaimSchema).default([]),
-  traction_signals: z.array(tractionSignalSchema).default([]),
-  relationships: z.array(relationshipSchema).default([]),
+  companies: lenientArray(companySchema),
+  founders: lenientArray(founderSchema),
+  investors: lenientArray(investorSchema),
+  features: lenientArray(featureSchema),
+  launches: lenientArray(launchSchema),
+  segments: lenientArray(segmentSchema),
+  funding_rounds: lenientArray(fundingRoundSchema),
+  snapshots: lenientArray(snapshotSchema),
+  posts: lenientArray(postSchema),
+  moat_claims: lenientArray(moatClaimSchema),
+  traction_signals: lenientArray(tractionSignalSchema),
+  relationships: lenientArray(relationshipSchema),
 });
 
 /** An ExtractedBatch with every array empty. */

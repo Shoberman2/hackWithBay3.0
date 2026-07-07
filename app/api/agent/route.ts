@@ -18,6 +18,7 @@ import { currentUser } from "@/lib/auth-server";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 300;
 
 const FREE_QUESTION_LIMIT = 5;
 
