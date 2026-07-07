@@ -56,6 +56,11 @@ The judging criteria explicitly penalize using Neo4j as a glorified key-value st
 | `LaunchEvent` | title, date, source, url |
 | `Segment` | name (e.g. "university-partnered", "SMB employers") |
 | `Source` | url, type (HN/PH/GitHub/blog), fetched_at |
+| `FundingRound` | round_type, amount_usd, announced_date |
+| `WebsiteSnapshot` | url, captured_at, positioning_summary, digest |
+| `Post` | title, url, platform (HN/PH/blog/GitHub), posted_at |
+| `MoatClaim` | type (network-effects/data/distribution/brand/switching-costs), summary, confidence |
+| `TractionSignal` | metric (users/stars/votes/app_ratings/web_rank), value, observed_at |
 
 ### Relationship types
 
@@ -71,6 +76,17 @@ The judging criteria explicitly penalize using Neo4j as a glorified key-value st
 | `TARGETS` | Company → Segment | |
 | `RELEVANT_TO` | Company → Idea | relevance_score |
 | `CITED_BY` | LaunchEvent → Source | |
+| `RAISED` | Company → FundingRound | |
+| `PARTICIPATED_IN` | Investor → FundingRound | lead (bool) |
+| `HAD_SNAPSHOT` | Company → WebsiteSnapshot | |
+| `NEXT_SNAPSHOT` | WebsiteSnapshot → WebsiteSnapshot | messaging_changed (bool) |
+| `POSTED` | Founder → Post | |
+| `ABOUT` | Post → Company | |
+| `CLAIMS_MOAT` | Company → MoatClaim | |
+| `EVIDENCED_BY` | MoatClaim → Source | |
+| `HAS_TRACTION` | Company → TractionSignal | |
+
+`INVESTED_IN` is kept as a direct convenience edge (shared-investor traversals stay 2-hop); `FundingRound` nodes carry the full history — round type, amount, date, participants. `WebsiteSnapshot` chains give positioning history ("this competitor pivoted messaging twice in 18 months"). `Post` nodes give founder activity timelines. `MoatClaim` is derived intelligence — an LLM analysis pass over each company's accumulated evidence — and must cite `Source` nodes like any other fact. `TractionSignal` captures user-base indicators over time.
 
 Every claim in the graph traces back to a Source node. No orphan facts. This matters for trust and for the demo ("click any edge, see where it came from").
 
@@ -122,8 +138,18 @@ Chosen entirely for being scriptable in an afternoon without fighting anti-bot s
 | Company blogs / changelogs / RSS | Feature releases, positioning language | Public fetch |
 | YC company directory | Batch, description, founders for YC companies | Public |
 | LLM web search (via gateway) | Founder backgrounds, funding announcements, everything else | Gateway |
+| Clay (MCP / API) | Verified funding totals, latest round, investor lists, employee counts, founder identification | Paid credits (workspace already provisioned) |
+| Wayback Machine CDX API | Website history: positioning pivots, dead products, pricing changes | Free, no auth |
+| SEC EDGAR Form D | US raise amounts + dates from actual filings | Free (declared User-Agent required) |
+| TechCrunch / Google News RSS | Funding announcements as they happen | Free, no auth |
+| HN author queries (Algolia) | Founder posting history (stories + comments per username) | Free, no auth |
+| GitHub GraphQL `stargazers(starredAt)` | Star history over time (REST endpoint is now gated) | Free tier w/ PAT |
+| Tranco / Cloudflare Radar | Domain rank over time (traction trend; top-1M only) | Free |
+| Apple iTunes Lookup | App rating counts + release cadence for mobile products | Free, no auth |
 
-**Explicitly out:** LinkedIn scraping, X/Twitter scraping, Crunchbase API. LinkedIn and X actively block scraping and will burn the whole day. Crunchbase is paywalled. Funding and founder background data comes from web search over press coverage instead, which is lower fidelity but actually works.
+**The accuracy layer:** free sources find and connect the landscape; Clay verifies the facts that matter. Clay aggregates paid enrichment providers (funding, investors, headcount) behind per-credit pricing — no enterprise contract — and is the fact-checker for every Company node that makes it into the graph. Validated on Handshake: exact latest round ($200M) and correct investor list (EQT Ventures, General Catalyst, Kleiner Perkins, True Ventures). Crunchbase's API is enterprise-license only and PitchBook starts around $12-30k/yr with no self-serve path, so Clay + EDGAR + press RSS is the indie-accessible way to get accurate funding data.
+
+**Explicitly out:** LinkedIn scraping, X/Twitter scraping, Crunchbase API (enterprise-only licensing). LinkedIn and X actively block scraping and will burn the whole day. Founder posting history comes from HN, Product Hunt, GitHub, and personal blog RSS instead — the platforms where technical founders actually post publicly.
 
 ## 7. Scope Discipline
 
