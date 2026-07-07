@@ -14,7 +14,7 @@ import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { hasPurchase, getReport, saveReport } from "@/lib/butterbase";
 import { currentUser } from "@/lib/auth-server";
-import { chat } from "@/lib/gateway";
+import { chat, chatStream, type ChatMessage } from "@/lib/gateway";
 import { runRead } from "@/lib/neo4j";
 import { env, isDemoMode } from "@/lib/env";
 import type { GraphLink, GraphNode } from "@/lib/types";
@@ -236,36 +236,80 @@ Structure, in order:
 
 Rules: cite company/investor/founder node names exactly as given; include source URLs from the digest where present; state only what the digest supports — no invented facts; plain, specific language; no marketing filler.`;
 
-async function generateReport(sessionId: string): Promise<string> {
+const REPORT_OPTIONS = { purpose: "report", maxTokens: 4000, temperature: 0.4 } as const;
+
+async function buildReportMessages(sessionId: string): Promise<ChatMessage[]> {
   const digest = isDemoMode() ? await digestFromFixture() : await digestFromNeo4j();
-  const markdown = await chat(
-    [
-      { role: "system", content: REPORT_SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Graph digest for session ${sessionId}:\n\n${JSON.stringify(digest, null, 2)}`,
-      },
-    ],
-    { purpose: "report", maxTokens: 4000, temperature: 0.4 },
-  );
+  return [
+    { role: "system", content: REPORT_SYSTEM_PROMPT },
+    {
+      role: "user",
+      content: `Graph digest for session ${sessionId}:\n\n${JSON.stringify(digest, null, 2)}`,
+    },
+  ];
+}
+
+async function generateReport(sessionId: string): Promise<string> {
+  const markdown = await chat(await buildReportMessages(sessionId), REPORT_OPTIONS);
   await saveReport(sessionId, markdown);
   return markdown;
+}
+
+/**
+ * Stream a fresh report as text chunks. Accumulates the full markdown
+ * server-side and persists it with saveReport once the stream completes,
+ * so a later GET/POST serves it from cache. chatStream never throws under
+ * normal conditions (it falls back to canned chunks), so the client always
+ * receives a complete document.
+ */
+async function streamReport(sessionId: string): Promise<Response> {
+  const messages = await buildReportMessages(sessionId);
+  const encoder = new TextEncoder();
+  let markdown = "";
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const chunk of chatStream(messages, REPORT_OPTIONS)) {
+          markdown += chunk;
+          controller.enqueue(encoder.encode(chunk));
+        }
+        if (markdown) await saveReport(sessionId, markdown);
+      } catch (cause) {
+        debugLog("stream report failed:", cause);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      // Disable proxy/Next buffering so chunks reach the client as produced.
+      "X-Accel-Buffering": "no",
+    },
+  });
 }
 
 /* ------------------------------------------------------------------ */
 /* Handlers                                                            */
 /* ------------------------------------------------------------------ */
 
-export async function POST(req: NextRequest): Promise<NextResponse> {
+export async function POST(req: NextRequest): Promise<Response> {
   if (!(await currentUser())) {
     return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   }
-  let sessionId: string;
+  let sessionId = "";
+  let wantsStream = false;
   try {
-    const body = (await req.json()) as { sessionId?: string };
+    const body = (await req.json()) as { sessionId?: string; stream?: boolean };
     sessionId = typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+    wantsStream = body.stream === true;
   } catch {
     sessionId = "";
+  }
+  if ((req.headers.get("accept") ?? "").includes("text/event-stream")) {
+    wantsStream = true;
   }
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
@@ -281,6 +325,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const cached = await getReport(sessionId);
     if (cached) {
       return NextResponse.json({ markdown: cached, cached: true });
+    }
+    if (wantsStream) {
+      return await streamReport(sessionId);
     }
     const markdown = await generateReport(sessionId);
     return NextResponse.json({ markdown, cached: false });

@@ -92,10 +92,11 @@ export default function PaywallCard({ sessionId, onUnlocked }: PaywallCardProps)
         checkoutUrl?: string;
         demo?: boolean;
         error?: string;
+        message?: string;
       };
       if (!res.ok || !body.orderId) {
         setPhase("idle");
-        setError(body.error ?? "Could not start checkout. Try again.");
+        setError(body.message ?? body.error ?? "Could not start checkout. Try again.");
         return;
       }
       if (body.demo || !body.checkoutUrl) {

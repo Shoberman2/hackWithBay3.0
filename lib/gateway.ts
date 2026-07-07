@@ -78,6 +78,10 @@ interface CompletionResponse {
   choices?: Array<{ message?: { content?: string } }>;
 }
 
+interface StreamChunk {
+  choices?: Array<{ delta?: { content?: string } }>;
+}
+
 async function requestCompletion(
   messages: ChatMessage[],
   options: ChatOptions,
@@ -137,6 +141,101 @@ async function requestCompletion(
   throw lastError ?? new GatewayError("gateway call failed", "network");
 }
 
+/**
+ * Live OpenAI-compatible SSE stream. Sets stream:true, reads the response
+ * body line by line, and yields each `choices[0].delta.content` fragment
+ * until the `[DONE]` sentinel. Throws a GatewayError on a non-OK response,
+ * a missing body, or a network failure — the caller decides how to recover.
+ */
+async function* streamCompletion(
+  messages: ChatMessage[],
+  options: ChatOptions,
+): AsyncGenerator<string> {
+  const body: Record<string, unknown> = {
+    model: options.model ?? DEFAULT_MODEL,
+    messages,
+    stream: true,
+  };
+  if (options.temperature !== undefined) body.temperature = options.temperature;
+  if (options.maxTokens !== undefined) body.max_tokens = options.maxTokens;
+  if (options.json) body.response_format = { type: "json_object" };
+
+  const url = `${env.BUTTERBASE_API_URL}/v1/chat/completions`;
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.BUTTERBASE_AI_KEY}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (cause) {
+    throw new GatewayError(
+      `gateway network failure: ${cause instanceof Error ? cause.message : String(cause)}`,
+      "network",
+    );
+  }
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new GatewayError(
+      `gateway HTTP ${response.status}: ${text.slice(0, 300)}`,
+      "http",
+      response.status,
+    );
+  }
+  if (!response.body) {
+    throw new GatewayError("gateway stream returned no body", "parse");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || !trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice(5).trim();
+      if (data === "[DONE]") return;
+      let parsed: StreamChunk;
+      try {
+        parsed = JSON.parse(data) as StreamChunk;
+      } catch {
+        continue; // keep-alive comment or a split frame; skip it
+      }
+      const delta = parsed.choices?.[0]?.delta?.content;
+      if (typeof delta === "string" && delta.length > 0) yield delta;
+    }
+  }
+}
+
+/**
+ * Yield a canned completion in word-ish chunks with tiny delays so demo
+ * mode (and any live fallback) still LOOKS token-streamed to the client.
+ */
+async function* streamCanned(
+  messages: ChatMessage[],
+  options: ChatOptions,
+): AsyncGenerator<string> {
+  const full = cannedCompletion(messages, options);
+  for (let i = 0; i < full.length; ) {
+    const size = 40 + Math.floor(Math.random() * 41); // 40-80 chars
+    yield full.slice(i, i + size);
+    i += size;
+    await new Promise((resolve) =>
+      setTimeout(resolve, 10 + Math.floor(Math.random() * 11)),
+    ); // 10-20ms
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Public API                                                          */
 /* ------------------------------------------------------------------ */
@@ -158,6 +257,39 @@ export async function chat(
   } catch (error) {
     debugLog("gateway call failed, using canned fallback:", (error as Error).message);
     return cannedCompletion(messages, options);
+  }
+}
+
+/**
+ * Streaming chat completion; yields assistant content as it arrives.
+ * Mirrors chat()'s never-dead-end philosophy:
+ *   - demo mode yields the canned completion in streamed-looking chunks;
+ *   - a live failure before any content is emitted falls back to the same
+ *     canned chunks, so the report never dead-ends;
+ *   - a failure mid-stream (after real content has already been sent) ends
+ *     the generator gracefully rather than re-dumping the whole canned body,
+ *     which would garble the accumulated markdown.
+ */
+export async function* chatStream(
+  messages: ChatMessage[],
+  options: ChatOptions = {},
+): AsyncGenerator<string> {
+  if (gatewayInDemoMode()) {
+    debugLog("demo stream, purpose:", options.purpose ?? "(sniffed)");
+    yield* streamCanned(messages, options);
+    return;
+  }
+  let yielded = false;
+  try {
+    for await (const chunk of streamCompletion(messages, options)) {
+      yielded = true;
+      yield chunk;
+    }
+  } catch (error) {
+    debugLog("gateway stream failed, using canned fallback:", (error as Error).message);
+    if (!yielded) {
+      yield* streamCanned(messages, options);
+    }
   }
 }
 

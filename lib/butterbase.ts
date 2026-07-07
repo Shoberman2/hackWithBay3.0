@@ -401,6 +401,37 @@ export async function recordQuestion(
 
 let cachedProductId: string | null = null;
 
+/**
+ * Readiness of the Butterbase → Stripe Connect billing path. The checkout
+ * route calls this before createPurchase so an un-onboarded account returns a
+ * clear 503 (with a runbook hint) instead of an opaque 502 from a thrown SDK
+ * call. Demo mode never touches Stripe, so it is always ready.
+ *
+ *   ready: false, reason 'not_connected'   -> connectOnboard() never completed
+ *   ready: false, reason 'charges_disabled'-> onboarded but Stripe hasn't
+ *                                             enabled charges yet
+ *   ready: false, reason 'error'           -> connectStatus() call failed
+ */
+export async function billingReadiness(): Promise<{
+  ready: boolean;
+  reason?: "not_connected" | "charges_disabled" | "error";
+}> {
+  if (butterbaseInDemoMode()) return { ready: true };
+  try {
+    const { data, error } = await getButterbase().billing.connectStatus();
+    if (error || !data) return { ready: false, reason: "error" };
+    if (!data.connected) return { ready: false, reason: "not_connected" };
+    if (!data.chargesEnabled) return { ready: false, reason: "charges_disabled" };
+    return { ready: true };
+  } catch (err) {
+    debugLog("connectStatus failed:", (err as Error).message);
+    return { ready: false, reason: "error" };
+  }
+}
+
+// ensureProduct lists first (idempotent across cold starts) and only creates
+// on a genuine miss; the in-memory cachedProductId just skips the re-list on
+// warm invocations. This is already resilient — no change needed.
 async function ensureProduct(client: ButterbaseClient): Promise<string> {
   if (cachedProductId) return cachedProductId;
   const listed = await client.billing.listProducts();
