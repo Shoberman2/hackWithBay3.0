@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createPurchase } from "@/lib/butterbase";
+import { billingReadiness, createPurchase } from "@/lib/butterbase";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +24,21 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId is required." }, { status: 400 });
+  }
+
+  // Fail fast (and legibly) when Stripe Connect onboarding is incomplete, so
+  // the client sees an actionable 503 instead of an opaque 502 from a thrown
+  // SDK purchase call. Demo mode reports ready and skips this.
+  const readiness = await billingReadiness();
+  if (!readiness.ready) {
+    return NextResponse.json(
+      {
+        error: "billing_not_onboarded",
+        message:
+          "Stripe Connect onboarding is incomplete. Run: npx tsx scripts/setup-billing.ts",
+      },
+      { status: 503 },
+    );
   }
 
   const token = req.cookies.get("rivalry_token")?.value;

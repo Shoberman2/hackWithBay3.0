@@ -33,6 +33,10 @@ export const env = {
   // RocketRide
   ROCKETRIDE_APIKEY: read("ROCKETRIDE_APIKEY"),
   ROCKETRIDE_URI: read("ROCKETRIDE_URI") ?? "https://cloud.rocketride.ai",
+  // The deployed pipeline's HTTP webhook trigger URL (from a one-click deploy
+  // to cloud.rocketride.ai). When set, this is the managed production endpoint
+  // the app POSTs to — no local .pipe upload. URL includes ?auth=<public token>.
+  ROCKETRIDE_ENDPOINT: read("ROCKETRIDE_ENDPOINT"),
 
   // Daytona (sandboxed analysis scripts)
   DAYTONA_API_KEY: read("DAYTONA_API_KEY"),
@@ -72,7 +76,17 @@ export function hasGateway(): boolean {
 
 /** True when RocketRide cloud pipelines can be invoked. */
 export function hasRocketRide(): boolean {
-  return Boolean(env.ROCKETRIDE_APIKEY);
+  return Boolean(env.ROCKETRIDE_APIKEY || env.ROCKETRIDE_ENDPOINT);
+}
+
+/**
+ * True when a deployed/managed RocketRide pipeline endpoint (HTTP webhook
+ * trigger URL) is configured. This is the preferred production path: the app
+ * POSTs to a pipeline already deployed on cloud.rocketride.ai instead of
+ * uploading the local .pipe over the SDK on every call.
+ */
+export function hasRocketRideEndpoint(): boolean {
+  return Boolean(env.ROCKETRIDE_ENDPOINT);
 }
 
 /** True when Daytona sandboxes can be created. */

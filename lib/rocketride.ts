@@ -1,19 +1,39 @@
 /**
  * RocketRide Cloud client wrapper (pipeline invocation).
  *
- * Invocation is WebSocket via the `rocketride` SDK (RocketRideClient),
- * never plain fetch() against cloud.rocketride.ai:
- *   connect -> use({ filepath }) -> send(token, payload) -> terminate -> disconnect.
+ * Two remote invocation paths, tried in this order:
+ *
+ * 1. Deployed endpoint (preferred, "managed production endpoint"): when
+ *    ROCKETRIDE_ENDPOINT is set, POST the JSON payload over HTTP to the
+ *    pipeline's deployed webhook trigger URL on cloud.rocketride.ai. The
+ *    pipe is already deployed — nothing is uploaded per call. This is the
+ *    hackathon-mandated "running as a managed, production endpoint" path.
+ *    The installed rocketride@1.3.0 SDK has NO way to invoke a deployed
+ *    pipeline by id/slug for a synchronous result (see below), so the
+ *    deployed webhook is called with plain fetch().
+ *
+ * 2. SDK filepath upload (fallback): WebSocket via the `rocketride` SDK
+ *    (RocketRideClient): connect -> use({ filepath }) -> send(token, payload)
+ *    -> terminate -> disconnect. This UPLOADS the local .pipe on every call.
+ *
+ * SDK surface note (rocketride@1.3.0, dist/types/client.d.ts + deploy.d.ts):
+ * `use()` accepts only `filepath` or an inline `pipeline` object — there is
+ * no `pipeline_id`/`slug` reference option. `client.deploy.{add,list,status,
+ * update,remove}` MANAGE server-side deployments (scheduled/manual via cron),
+ * and `DeploymentRecord` exposes no trigger/webhook URL and no synchronous
+ * invoke. So a deployed pipeline is only callable as a production endpoint
+ * over its HTTP webhook URL — hence path 1 above.
  *
  * Fallback ladder (demo insurance):
+ * - deployed endpoint -> SDK filepath upload -> local extraction.
  * - !hasRocketRide() or DEMO_MODE -> local extraction via lib/pipeline/extract.ts
  *   (the conductor notes in the event stream that extraction ran locally).
- * - Remote call throws or returns unparseable output -> local extraction.
+ * - Any remote call that throws or returns unparseable output -> next rung.
  */
 
 import path from "node:path";
 import { RocketRideClient } from "rocketride";
-import { env, hasGateway, hasRocketRide } from "@/lib/env";
+import { env, hasGateway, hasRocketRide, hasRocketRideEndpoint } from "@/lib/env";
 import type { ExtractedBatch, OnboardingResult, RawDoc } from "@/lib/types";
 import {
   emptyBatch,
@@ -119,10 +139,56 @@ function stripFences(text: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
+/** Extraction is slow (LLM over a batch of docs); give the endpoint 60s. */
+const ENDPOINT_TIMEOUT_MS = 60_000;
+
 /**
- * Generic RocketRide pipe invocation: connect -> use(filepath) ->
- * send(JSON payload) -> coerce the response to JSON -> terminate ->
- * disconnect. Shared by the extraction pipe and the news-monitor pipe.
+ * Invoke the deployed pipeline over its HTTP webhook trigger URL.
+ *
+ * Webhook contract: JSON in -> JSON out. The deployed webhook node feeds the
+ * LLM node, and the response node returns the ExtractedBatch JSON as the HTTP
+ * body. The auth token is carried in the URL's `?auth=` query param (baked
+ * into ROCKETRIDE_ENDPOINT), so no extra header is required; secrets like the
+ * Butterbase key are interpolated (`${VAR}`) server-side at deploy time.
+ *
+ * The response body may be the ExtractedBatch directly or a PIPELINE_RESULT-
+ * shaped envelope (result_types + text/data/answers lanes); coerceResultToJson
+ * handles both, exactly like the SDK path.
+ */
+async function runEndpointExtraction(
+  input: ExtractionInput,
+): Promise<ExtractedBatch> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ENDPOINT_TIMEOUT_MS);
+  try {
+    const res = await fetch(env.ROCKETRIDE_ENDPOINT as string, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(
+        `rocketride endpoint ${res.status} ${res.statusText}${detail ? `: ${detail.slice(0, 300)}` : ""}`,
+      );
+    }
+    // Prefer JSON; fall back to text (some webhook nodes return text/plain).
+    const contentType = res.headers.get("content-type") ?? "";
+    const payload: unknown = contentType.includes("application/json")
+      ? await res.json()
+      : await res.text();
+    return parseExtractedBatch(coerceResultToJson(payload));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Generic RocketRide pipe invocation over the SDK WebSocket: connect ->
+ * use(filepath) -> send(JSON payload) -> coerce the response to JSON ->
+ * terminate -> disconnect. Shared by the extraction pipe and the
+ * news-monitor pipe. Uploads the local .pipe on each call.
  */
 export async function invokePipe(
   filepath: string,
@@ -188,20 +254,39 @@ async function runRemoteExtraction(
 /* Public surface                                                      */
 /* ------------------------------------------------------------------ */
 
-/** Run the deployed extraction .pipe over a batch of raw documents. */
+/** Run the deployed extraction pipeline over a batch of raw documents. */
 export async function extractEntities(
   input: ExtractionInput,
 ): Promise<ExtractedBatch> {
   if (input.raw_documents.length === 0) return emptyBatch();
   if (!usesRemoteExtraction()) {
+    debug("extracting locally via the Butterbase gateway (RocketRide not configured)");
     return extractBatch(input.raw_documents, input.idea, input.tags);
   }
-  try {
-    return await runRemoteExtraction(input);
-  } catch (err) {
-    debug("remote extraction failed, falling back to local:", err);
-    return extractBatch(input.raw_documents, input.idea, input.tags);
+
+  // Rung 1: deployed managed endpoint (HTTP webhook trigger URL).
+  if (hasRocketRideEndpoint()) {
+    try {
+      debug("extracting via deployed RocketRide Cloud endpoint (HTTP webhook)");
+      return await runEndpointExtraction(input);
+    } catch (err) {
+      debug("deployed endpoint failed, falling back to SDK filepath upload:", err);
+    }
   }
+
+  // Rung 2: SDK filepath upload (only when an API key is configured).
+  if (hasRocketRide() && env.ROCKETRIDE_APIKEY) {
+    try {
+      debug("extracting via RocketRide SDK filepath upload (use({ filepath }))");
+      return await runRemoteExtraction(input);
+    } catch (err) {
+      debug("SDK filepath upload failed, falling back to local:", err);
+    }
+  }
+
+  // Rung 3: local extraction via the Butterbase gateway.
+  debug("extracting locally via the Butterbase gateway (remote paths exhausted)");
+  return extractBatch(input.raw_documents, input.idea, input.tags);
 }
 
 /** Convenience form matching the pipeline conductor's call site. */

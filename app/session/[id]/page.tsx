@@ -82,23 +82,54 @@ export default function SessionPage({
   const generateReport = useCallback(async () => {
     setReportLoading(true);
     setReportError(null);
+    setReportMarkdown(null);
     try {
       const res = await fetch("/api/report", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: id }),
+        body: JSON.stringify({ sessionId: id, stream: true }),
       });
       if (res.status === 402) {
         setNeedsPayment(true);
         return;
       }
-      const body = (await res.json()) as { markdown?: string; error?: string };
-      if (!res.ok || !body.markdown) {
-        setReportError(body.error ?? "Report generation failed. Try again.");
+      // Cached reports come back as JSON; fresh ones stream as text/plain.
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const body = (await res.json()) as { markdown?: string; error?: string };
+        if (!res.ok || !body.markdown) {
+          setReportError(body.error ?? "Report generation failed. Try again.");
+          return;
+        }
+        setNeedsPayment(false);
+        setReportMarkdown(body.markdown);
         return;
       }
+      if (!res.ok || !res.body) {
+        setReportError("Report generation failed. Try again.");
+        return;
+      }
+      // Consume the token stream, revealing markdown as it arrives.
       setNeedsPayment(false);
-      setReportMarkdown(body.markdown);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let acc = "";
+      let first = true;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        acc += decoder.decode(value, { stream: true });
+        if (first) {
+          setReportLoading(false); // show text while the rest streams in
+          first = false;
+        }
+        setReportMarkdown(acc);
+      }
+      acc += decoder.decode();
+      setReportMarkdown(acc);
+      if (!acc) {
+        setReportError("Report generation failed. Try again.");
+      }
     } catch {
       setReportError("Report generation failed. Check your connection.");
     } finally {
