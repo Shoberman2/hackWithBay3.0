@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "neo4j:seed": "node --env-file-if-exists=.env.local scripts/seed-neo4j.mjs",
+    "setup:butterbase": "node --env-file-if-exists=.env.local scripts/setup-butterbase.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

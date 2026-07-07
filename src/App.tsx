@@ -1,27 +1,46 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { User } from '@butterbase/sdk'
 import {
+  Archive,
   BadgeCheck,
+  BrainCircuit,
   Building2,
   CircleDot,
+  Cloud,
   Database,
   ExternalLink,
+  FileText,
   Filter,
   Globe2,
   KeyRound,
   Layers3,
   Lightbulb,
+  LogIn,
+  LogOut,
   Network,
   Play,
+  RadioTower,
   Rocket,
   Route,
+  Save,
   Search,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import './App.css'
-import { isButterbaseConfigured } from './lib/butterbase'
+import {
+  butterbaseFeatures,
+  getCurrentUser,
+  handleOAuthRedirect,
+  isButterbaseConfigured,
+  saveScanSnapshot,
+  signInWithGoogle,
+  signOutOfButterbase,
+  type SavedScanResult,
+} from './lib/butterbase'
 import {
   buildMarketGraph,
   type GraphNode,
@@ -41,6 +60,24 @@ const NODE_STYLE: Record<NodeKind, { label: string; icon: LucideIcon; color: str
   investor: { label: 'Investors', icon: BadgeCheck, color: '#517f45' },
   opportunity: { label: 'White Space', icon: Lightbulb, color: '#b26b1f' },
   trend: { label: 'Trends', icon: TrendingUp, color: '#5f6f3a' },
+}
+
+const FEATURE_ICONS: Record<string, LucideIcon> = {
+  'Google OAuth': KeyRound,
+  'RLS Data API': ShieldCheck,
+  Realtime: RadioTower,
+  Storage: Archive,
+  'Native RAG': BrainCircuit,
+  Functions: Cloud,
+  'AI Gateway': Sparkles,
+  'No Paywall': FileText,
+}
+
+const featureToneLabel = {
+  ready: 'Ready',
+  hooked: 'Hooked',
+  free: 'Free',
+  off: 'Off',
 }
 
 const FILTERS: Array<'all' | NodeKind> = [
@@ -161,6 +198,12 @@ function App() {
   const [selectedNodeId, setSelectedNodeId] = useState('idea')
   const [scanNumber, setScanNumber] = useState(1)
   const [isScanning, setIsScanning] = useState(false)
+  const [authUser, setAuthUser] = useState<User | null>(null)
+  const [authMessage, setAuthMessage] = useState('Google sign-in keeps saved scans private.')
+  const [isAuthBusy, setIsAuthBusy] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [lastSavedScan, setLastSavedScan] = useState<SavedScanResult | null>(null)
+  const [saveMessage, setSaveMessage] = useState('Save the graph to Butterbase after sign-in.')
 
   const graph = useMemo(
     () => buildMarketGraph(activePrompt, mode, depth, scanNumber),
@@ -176,8 +219,47 @@ function App() {
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes.find((node) => node.id === 'idea')
 
+  useEffect(() => {
+    let isMounted = true
+
+    const hydrateAuth = async () => {
+      if (!isButterbaseConfigured) {
+        setAuthMessage('Add Butterbase env values to enable Google sign-in.')
+        return
+      }
+
+      setIsAuthBusy(true)
+
+      try {
+        const callbackUser = await handleOAuthRedirect()
+        const currentUser = callbackUser ?? (await getCurrentUser())
+
+        if (!isMounted) return
+        setAuthUser(currentUser)
+        setAuthMessage(
+          currentUser
+            ? `Signed in as ${currentUser.email}`
+            : 'Google sign-in is ready once the provider is configured.',
+        )
+      } catch (error) {
+        if (!isMounted) return
+        setAuthMessage(error instanceof Error ? error.message : 'Could not restore the Butterbase session.')
+      } finally {
+        if (isMounted) setIsAuthBusy(false)
+      }
+    }
+
+    void hydrateAuth()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   const runScan = () => {
     setIsScanning(true)
+    setLastSavedScan(null)
+    setSaveMessage('New graph generated locally. Save it to Butterbase when ready.')
 
     window.setTimeout(() => {
       setActivePrompt(prompt)
@@ -187,17 +269,88 @@ function App() {
     }, 650)
   }
 
+  const startGoogleSignIn = async () => {
+    setIsAuthBusy(true)
+    setAuthMessage('Opening Google sign-in through Butterbase.')
+
+    try {
+      signInWithGoogle()
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Google sign-in could not start.')
+      setIsAuthBusy(false)
+    }
+  }
+
+  const signOut = async () => {
+    setIsAuthBusy(true)
+
+    try {
+      await signOutOfButterbase()
+      setAuthUser(null)
+      setLastSavedScan(null)
+      setAuthMessage('Signed out of Butterbase.')
+      setSaveMessage('Sign back in with Google to save private scans.')
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Could not sign out.')
+    } finally {
+      setIsAuthBusy(false)
+    }
+  }
+
+  const saveToButterbase = async () => {
+    setIsSaving(true)
+    setSaveMessage('Saving scan, evidence, and free report draft.')
+
+    try {
+      const savedScan = await saveScanSnapshot({
+        graph,
+        prompt: activePrompt,
+        mode,
+        depth,
+        scanNumber,
+      })
+
+      setLastSavedScan(savedScan)
+      setSaveMessage(`Saved ${savedScan.tableWrites} rows to Butterbase.`)
+    } catch (error) {
+      setSaveMessage(error instanceof Error ? error.message : 'Could not save the scan to Butterbase.')
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <div className="eyebrow">HackwithBay 3.0</div>
+          <div className="eyebrow">Competitive graph workspace</div>
           <h1>Rivalry</h1>
         </div>
         <div className="topbar-actions">
           <div className="status-pill">
             <CircleDot size={16} />
-            Live graph demo
+            Free founder mode
+          </div>
+          <div className="auth-card" aria-live="polite">
+            <div>
+              <strong>{authUser ? authUser.display_name ?? authUser.email : 'Founder account'}</strong>
+              <span>{authMessage}</span>
+            </div>
+            {authUser ? (
+              <button type="button" className="icon-button" onClick={signOut} disabled={isAuthBusy} aria-label="Sign out">
+                <LogOut size={18} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={startGoogleSignIn}
+                disabled={!isButterbaseConfigured || isAuthBusy}
+              >
+                <LogIn size={16} />
+                Google
+              </button>
+            )}
           </div>
           <button type="button" className="icon-button" aria-label="Filter graph">
             <Filter size={18} />
@@ -260,6 +413,57 @@ function App() {
             {isScanning ? <Route size={18} /> : <Play size={18} />}
             {isScanning ? 'Mapping' : 'Build graph'}
           </button>
+
+          <div className="save-card">
+            <div className="save-card-header">
+              <div>
+                <strong>Butterbase Save</strong>
+                <span>{saveMessage}</span>
+              </div>
+              <Save size={18} />
+            </div>
+            <button
+              type="button"
+              className="secondary-button full-width"
+              onClick={saveToButterbase}
+              disabled={!authUser || isSaving || !isButterbaseConfigured}
+            >
+              <Save size={16} />
+              {isSaving ? 'Saving' : 'Save private scan'}
+            </button>
+            {lastSavedScan ? (
+              <div className="save-meta">
+                <span>{lastSavedScan.scanId.slice(0, 8)}</span>
+                <span>{lastSavedScan.storageObjectId ? 'Storage file' : 'Storage skipped'}</span>
+                <span>{lastSavedScan.ragDocumentId ? 'RAG memo' : 'RAG queued'}</span>
+              </div>
+            ) : null}
+            {lastSavedScan?.warnings.length ? (
+              <p className="save-warning">{lastSavedScan.warnings[0]}</p>
+            ) : null}
+          </div>
+
+          <section className="butterbase-stack" aria-label="Butterbase feature coverage">
+            <div className="mini-heading">
+              <KeyRound size={16} />
+              <span>Butterbase Stack</span>
+            </div>
+            <div className="feature-grid">
+              {butterbaseFeatures.map((feature) => {
+                const Icon = FEATURE_ICONS[feature.label] ?? Sparkles
+                return (
+                  <article key={feature.label} className={`feature-tile feature-${feature.tone}`}>
+                    <div>
+                      <Icon size={16} />
+                      <strong>{feature.label}</strong>
+                    </div>
+                    <p>{feature.detail}</p>
+                    <span>{featureToneLabel[feature.tone]}</span>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
 
           <div className="integration-list">
             {envStatus.map((item) => {
@@ -348,6 +552,22 @@ function App() {
               </>
             ) : null}
           </div>
+
+          <section className="side-section">
+            <h3>Free Report Draft</h3>
+            <article className="report-item">
+              <div>
+                <FileText size={16} />
+                <strong>{lastSavedScan ? 'Saved in Butterbase' : 'Ready after save'}</strong>
+              </div>
+              <p>
+                {lastSavedScan
+                  ? 'Private scan rows, source artifacts, graph Q&A, and a free memo record are linked together.'
+                  : 'Google sign-in unlocks private saved scans, evidence bundles, and a free memo artifact.'}
+              </p>
+              {lastSavedScan?.functionPlan?.length ? <span>{lastSavedScan.functionPlan[0]}</span> : null}
+            </article>
+          </section>
 
           <section className="side-section">
             <h3>Landscape Signals</h3>

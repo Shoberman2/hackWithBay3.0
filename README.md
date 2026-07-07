@@ -1,6 +1,6 @@
 # Rivalry: Competitive Landscape Graphs for Idea-Stage Founders
 
-**HackwithBay 3.0 submission. Built on Neo4j, RocketRide Cloud, and Butterbase.**
+**Built on Neo4j, RocketRide Cloud, and Butterbase. Free for founders.**
 
 See [PRODUCT_VISION.md](/Users/shoberman/charityChecker/PRODUCT_VISION.md) for the distilled product vision derived from this plan.
 
@@ -32,11 +32,11 @@ This takes days, is instantly stale, and the flat format hides the most importan
 2. **Onboarding interview.** An agent asks 4 to 6 sharpening questions, because "internship platform" is ambiguous. Marketplace or ATS? Students or employers as the paying side? US or global? University-partnered or direct? Each answer narrows the search space and tags the session.
 3. **Live graph construction.** The ingestion pipeline kicks off. The graph populates in front of the user as entities are discovered and connected: companies appear, then founder nodes attach, then investor nodes, then feature and launch nodes. Watching the landscape assemble itself is the product moment.
 4. **Exploration and insight.** The user can click any node to expand it, or ask the agent natural-language questions that get answered via graph traversal: "which of these companies share investors," "who pivoted into this space from something else," "what feature does everyone have that I should treat as table stakes."
-5. **Report.** A paid tier generates a full written landscape report from the graph: competitive clusters, white space analysis, founder pattern analysis, and a positioning recommendation.
+5. **Report.** A free source-backed landscape memo is generated from the graph: competitive clusters, white space analysis, founder pattern analysis, and a positioning recommendation.
 
 ### What makes it graph-native, not a database with extra steps
 
-The judging criteria explicitly penalize using Neo4j as a glorified key-value store. Rivalry's core queries are traversals and algorithms that have no clean SQL equivalent:
+Rivalry's core queries are traversals and algorithms that have no clean SQL equivalent:
 
 - **Shared-investor paths.** Two "competitors" connected through a common lead investor is a 2-hop traversal and a major strategic signal (they will not both die; one may get merged into the other).
 - **Founder lineage.** WORKED_AT edges reveal talent clusters: "four founders in this space came out of Handshake." That is a pattern query across relationships, invisible in rows.
@@ -78,13 +78,13 @@ Every claim in the graph traces back to a Source node. No orphan facts. This mat
 
 ## 5. Architecture and Stack Mapping
 
-All three mandatory technologies are load-bearing. None are bolted on.
+All three platform layers are load-bearing. None are bolted on.
 
-### Neo4j (mandatory)
+### Neo4j
 
-The graph above IS the product. The agent answers user questions by generating Cypher, running traversals, and executing GDS algorithms (community detection, centrality). Neo4j Aura free tier for the hackathon.
+The graph above IS the product. The agent answers user questions by generating Cypher, running traversals, and executing GDS algorithms such as community detection and centrality.
 
-### RocketRide Cloud (mandatory)
+### RocketRide Cloud
 
 Hosts the ingestion and enrichment pipeline as a managed production endpoint the app calls. Pipeline stages:
 
@@ -95,18 +95,23 @@ Hosts the ingestion and enrichment pipeline as a managed production endpoint the
 5. **Graph write.** Batched Cypher MERGE statements into Neo4j.
 6. **Insight pass.** Trigger GDS algorithms, write derived edges (clusters, centrality scores) back.
 
-Built locally in the RocketRide VS Code extension, deployed to cloud.rocketride.ai. A local-only pipeline fails the mandatory requirement, so deployment happens early, not at 4pm.
+Built locally in the RocketRide VS Code extension and designed to run as a remote pipeline endpoint rather than a local-only background script.
 
-### Butterbase (mandatory)
+### Butterbase
 
-- **Auth:** founder accounts, session management.
-- **Database:** user profiles, saved sessions, onboarding answers, query history, report artifacts.
-- **AI gateway:** all LLM calls (onboarding agent, entity extraction, report generation) route through the Butterbase model gateway rather than raw provider keys.
-- **Payments (explicit requirement):** the full written landscape report is gated behind a one-time purchase. Free tier gets the live graph and 5 agent questions; the report and unlimited questions are paid. Payment is in active use in the core flow, which the rules demand.
+- **Auth:** Google sign-in for founder accounts and persistent sessions.
+- **Database:** user profiles, saved sessions, onboarding answers, graph Q&A, source artifacts, report drafts, and realtime pipeline events.
+- **Row-level security:** every saved scan table is isolated by `user_id`.
+- **Realtime:** graph and pipeline rows are configured for live updates as the ingestion flow writes new data.
+- **Storage:** source-backed evidence bundles are saved as private JSON artifacts.
+- **RAG:** compact source memos are ingested so the agent can answer follow-up questions from saved evidence.
+- **Functions:** a free brief function generates next questions and report-prep hints for a saved scan.
+- **AI gateway:** onboarding, extraction, and report generation can route through Butterbase rather than raw provider keys.
+- **No paywall:** saved scans, questions, evidence bundles, and report drafts are free to use. Billing and checkout are intentionally absent.
 
 ### Cognee (optional bonus)
 
-Agent memory across sessions. When a founder returns or refines their idea, the agent remembers what it already ingested and only fetches deltas. Also remembers the founder's own context ("user cares about the university-partnered segment") so follow-up questions get sharper. Cheap points, natural fit.
+Agent memory across sessions. When a founder returns or refines their idea, the agent remembers what it already ingested and only fetches deltas. It also remembers the founder's own context ("user cares about the university-partnered segment") so follow-up questions get sharper.
 
 ### Daytona (optional, likely cut)
 
@@ -129,33 +134,33 @@ Chosen entirely for being scriptable in an afternoon without fighting anti-bot s
 
 ## 7. Scope Discipline
 
-What is IN for the hackathon:
+What is in scope:
 
-- One polished end-to-end flow: idea → onboarding → live graph → agent Q&A → paid report
-- One or two pre-warmed demo verticals (internship platforms, plus one backup) with the pipeline already run so the demo cannot die on stage
-- Live incremental pipeline run for one fresh query during the demo, with the pre-warmed graph as fallback
+- One polished end-to-end flow: idea → onboarding → live graph → agent Q&A → free report draft
+- One or two pre-warmed verticals, starting with internship platforms
+- Live incremental pipeline run for a fresh query, with the pre-warmed graph as fallback
 - 20 to 40 companies per vertical. Depth of connection beats breadth of coverage
 
-What is OUT:
+What is out of scope:
 
 - Ongoing monitoring, alerts, or scheduled re-crawls (that is the Crayon business, not this one)
 - Founder posting schedules and social media tracking (scraping trap, low signal at idea stage anyway)
 - "All public information." The pitch is not exhaustiveness. It is that the relationships are the intelligence
 
-## 8. Demo Script (3 minutes)
+## 8. Guided Walkthrough
 
 1. **Cold open (20s).** "Every founder starts with 40 Chrome tabs and a spreadsheet. Spreadsheets can't show relationships. Relationships are the intelligence."
 2. **Type the idea (20s).** "internship platform." Answer 3 onboarding questions live.
-3. **The moment (60s).** Graph builds on screen. Companies, founders, investors, features connecting in real time. This is the visual judges remember.
+3. **The moment (60s).** Graph builds on screen. Companies, founders, investors, and features connect in real time.
 4. **Graph reasoning (60s).** Ask two questions that showcase traversal: "which competitors share investors" (path lights up), "where is the white space" (community detection result, empty cluster highlighted).
-5. **Close (20s).** Click "generate full report," hit the Butterbase paywall, pay, report renders. All three mandatory technologies shown load-bearing in one flow.
+5. **Close (20s).** Click "save private scan," show the Butterbase-backed free report draft, source artifact, RAG memo, and realtime event records.
 
 ## 9. Honest Risks
 
 - **Live pipeline on stage.** Ingestion latency is unpredictable. Mitigation: pre-warmed graphs, and the "live" run streams into an already-rich graph so even a slow pipeline shows movement.
 - **Entity extraction quality.** LLM extraction will hallucinate or misattribute. Mitigation: every fact carries a Source edge, extraction prompt requires citations, low-confidence facts render visually distinct.
-- **This is a one-shot product.** As a business, idea-stage founders use this once and they are broke. Retention is near zero. That is fine for a hackathon and honestly fine for the one-time-payment model the Butterbase requirement forces anyway. Do not pitch it as a SaaS with recurring revenue; pitch it as the first tool in the founder journey.
-- **Graph washing.** Biggest disqualification risk per the judging criteria. Mitigation is baked into the product: the headline demo moments (shared investors, white space, lineage) are literally impossible without traversal.
+- **This is a one-shot product.** Idea-stage founders may use this most intensely at the start of a company. Rivalry should earn repeat use by becoming the saved research workspace as the idea changes.
+- **Graph washing.** The mitigation is baked into the product: the headline moments (shared investors, white space, lineage) are literally impossible without traversal.
 
 ## 10. Name
 
@@ -165,9 +170,9 @@ What is OUT:
 
 - **Pipeline:** RocketRide stages, source connectors, extraction prompts, deploy to cloud early
 - **Graph + agent:** Neo4j schema, GDS setup, Cypher generation agent, Cognee memory
-- **Frontend + Butterbase:** live graph viz (force-directed, streaming node arrival), onboarding flow, auth, payment gate, report renderer
+- **Frontend + Butterbase:** live graph viz (force-directed, streaming node arrival), onboarding flow, Google auth, saved scans, free report renderer
 
-First milestone by hour 3: one company flowing end to end from a search result to a rendered node on screen. Everything else is iteration on a working spine.
+First milestone: one company flowing end to end from a search result to a rendered node on screen. Everything else is iteration on a working spine.
 
 ## 12. Local Prototype Setup
 
@@ -181,6 +186,12 @@ Copy `.env.example` to `.env.local` for real service credentials. Keep service k
 ### Butterbase
 
 The frontend is wired through [src/lib/butterbase.ts](/Users/shoberman/charityChecker/src/lib/butterbase.ts). Apply [butterbase/schema.json](/Users/shoberman/charityChecker/butterbase/schema.json) and enable the policies in [butterbase/rls.json](/Users/shoberman/charityChecker/butterbase/rls.json).
+
+```bash
+npm run setup:butterbase
+```
+
+The setup command dry-runs and applies the schema, enables RLS, configures realtime for the user-owned tables, restricts storage to private artifacts, deploys the free brief function, and optionally configures Google OAuth when `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are present. All core features are free; there is no checkout, billing flow, or paid report gate.
 
 ### Neo4j
 

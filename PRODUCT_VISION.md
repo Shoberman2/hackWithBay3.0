@@ -30,7 +30,7 @@ The output is not a generic market report. It is a source-backed graph that expl
 2. **Clarifying interview.** The agent asks focused questions to narrow buyer, geography, business model, and segment.
 3. **Live graph construction.** Rivalry discovers companies, people, investors, features, launch events, and sources, then links them into Neo4j.
 4. **Graph-native exploration.** The founder clicks nodes or asks natural-language questions that resolve to traversals and graph algorithms.
-5. **Source-backed report.** The paid report summarizes competitive clusters, white space, founder patterns, and positioning recommendations.
+5. **Source-backed report.** A free report draft summarizes competitive clusters, white space, founder patterns, and positioning recommendations.
 
 ## Why Graph-Native
 
@@ -49,24 +49,24 @@ Rivalry should only ship features that need relationships to be useful. The grap
 - **Trust through provenance.** Every meaningful node and edge should trace back to a source.
 - **Depth over exhaustiveness.** A smaller graph with useful relationships beats a broad list of shallow facts.
 - **Founder-speed insight.** The first valuable graph should appear in minutes, not after a research project.
-- **Sharp scope.** Avoid ongoing monitoring, social scraping, and "all public information" traps during the hackathon build.
+- **Sharp scope.** Avoid ongoing monitoring, social scraping, and "all public information" traps in the first build.
 
 ## MVP Shape
 
-The hackathon MVP should prove one polished end-to-end path:
+The MVP should prove one polished end-to-end path:
 
 - Founder idea input and onboarding questions.
 - Pre-warmed internship-platform demo graph.
 - Live incremental graph build for a fresh query.
 - Clickable graph nodes and evidence trail.
 - Two graph-native questions: shared investors and white space.
-- Paid landscape report gated through Butterbase.
+- Free landscape report draft backed by Butterbase scans, source artifacts, and RAG evidence.
 
 ## Technology Roles
 
 - **Neo4j:** Stores and queries the competitive landscape graph. Traversals, centrality, and community detection are the core intelligence.
 - **RocketRide Cloud:** Runs discovery, extraction, deduplication, graph writes, and insight generation as a deployed agent pipeline.
-- **Butterbase:** Handles auth, saved sessions, onboarding answers, report artifacts, model gateway calls, and the paid report flow.
+- **Butterbase:** Handles Google auth, saved sessions, onboarding answers, graph Q&A, realtime events, source artifacts, RAG evidence, functions, and model gateway calls. The flow has no paywall.
 - **Cognee, optional:** Remembers founder context and prior scans across sessions.
 
 ## Success Criteria

@@ -5,6 +5,11 @@
     { "table_name": "scan_entities", "user_column": "user_id" },
     { "table_name": "scan_relationships", "user_column": "user_id" },
     { "table_name": "research_sources", "user_column": "user_id" },
-    { "table_name": "opportunity_notes", "user_column": "user_id" }
+    { "table_name": "opportunity_notes", "user_column": "user_id" },
+    { "table_name": "onboarding_answers", "user_column": "user_id" },
+    { "table_name": "graph_questions", "user_column": "user_id" },
+    { "table_name": "report_artifacts", "user_column": "user_id" },
+    { "table_name": "source_artifacts", "user_column": "user_id" },
+    { "table_name": "pipeline_events", "user_column": "user_id" }
   ]
 }

@@ -414,7 +414,7 @@ export const buildMarketGraph = (
       {
         title: 'Partner-led distribution',
         reason: 'People and websites sit between buyers and products.',
-        wedge: 'Recruit trusted operators before pushing paid acquisition.',
+        wedge: 'Recruit trusted operators before pushing broad acquisition.',
       },
     ],
     sources: [

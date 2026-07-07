@@ -79,6 +79,69 @@
           "confidence": { "type": "numeric" },
           "created_at": { "type": "timestamptz", "default": "now()" }
         }
+      },
+      "onboarding_answers": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "question": { "type": "text", "nullable": false },
+          "answer": { "type": "text", "nullable": false },
+          "signal": { "type": "text" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "graph_questions": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "question": { "type": "text", "nullable": false },
+          "answer": { "type": "text" },
+          "cypher": { "type": "text" },
+          "status": { "type": "text", "nullable": false, "default": "'draft'" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "report_artifacts": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "title": { "type": "text", "nullable": false },
+          "report_kind": { "type": "text", "nullable": false },
+          "status": { "type": "text", "nullable": false, "default": "'draft'" },
+          "object_id": { "type": "text" },
+          "rag_document_id": { "type": "text" },
+          "summary": { "type": "text" },
+          "generated_at": { "type": "timestamptz", "default": "now()" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "source_artifacts": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "title": { "type": "text", "nullable": false },
+          "url": { "type": "text" },
+          "artifact_type": { "type": "text", "nullable": false },
+          "storage_object_id": { "type": "text" },
+          "rag_document_id": { "type": "text" },
+          "metadata": { "type": "jsonb", "default": "'{}'::jsonb" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "pipeline_events": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "event_type": { "type": "text", "nullable": false },
+          "message": { "type": "text", "nullable": false },
+          "metadata": { "type": "jsonb", "default": "'{}'::jsonb" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
       }
     }
   }

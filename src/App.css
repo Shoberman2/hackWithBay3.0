@@ -34,6 +34,9 @@
 .topbar-actions,
 .panel-heading,
 .status-pill,
+.auth-card,
+.auth-card .secondary-button,
+.mini-heading,
 .signal-row,
 .source-link,
 .node-kicker {
@@ -43,6 +46,8 @@
 
 .topbar-actions {
   gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .status-pill {
@@ -55,6 +60,41 @@
   color: #46544b;
   font-size: 14px;
   font-weight: 700;
+}
+
+.auth-card {
+  min-height: 38px;
+  max-width: 390px;
+  gap: 10px;
+  border: 1px solid #d3d9cf;
+  border-radius: 8px;
+  padding: 6px 6px 6px 10px;
+  background: #ffffff;
+}
+
+.auth-card div {
+  min-width: 0;
+}
+
+.auth-card strong,
+.auth-card span {
+  display: block;
+}
+
+.auth-card strong {
+  color: #1d211f;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.auth-card span {
+  max-width: 260px;
+  overflow: hidden;
+  color: #657168;
+  font-size: 12px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .workspace-grid {
@@ -193,6 +233,26 @@ button:disabled {
   font-weight: 850;
 }
 
+.secondary-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #cdd8d2;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #eef5f1;
+  color: #245e58;
+  font-size: 13px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.secondary-button.full-width {
+  width: 100%;
+}
+
 .icon-button {
   width: 38px;
   height: 38px;
@@ -203,6 +263,125 @@ button:disabled {
   border-radius: 8px;
   background: #ffffff;
   color: #46544b;
+}
+
+.save-card,
+.butterbase-stack {
+  margin-top: 14px;
+  border: 1px solid #e1e5dd;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcf8;
+}
+
+.save-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.save-card-header strong,
+.save-card-header span {
+  display: block;
+}
+
+.save-card-header strong {
+  color: #1d211f;
+  font-size: 14px;
+}
+
+.save-card-header span {
+  margin-top: 3px;
+  color: #657168;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.save-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.save-meta span,
+.feature-tile > span {
+  border-radius: 999px;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.save-meta span {
+  color: #445149;
+  background: #edf1ea;
+}
+
+.save-warning {
+  margin: 8px 0 0;
+  color: #81572a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.mini-heading {
+  gap: 7px;
+  color: #435149;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.feature-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.feature-tile {
+  border: 1px solid #e1e5dd;
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.feature-tile div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.feature-tile strong {
+  color: #1d211f;
+  font-size: 13px;
+}
+
+.feature-tile p {
+  margin: 6px 0 8px;
+  color: #647168;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.feature-tile > span {
+  display: inline-block;
+}
+
+.feature-ready > span,
+.feature-free > span {
+  color: #245e58;
+  background: #deebe6;
+}
+
+.feature-hooked > span {
+  color: #515d2f;
+  background: #edf2d8;
+}
+
+.feature-off > span {
+  color: #6b6258;
+  background: #ede7df;
 }
 
 .integration-list {
@@ -330,7 +509,8 @@ button:disabled {
 
 .metric-card,
 .activity-item,
-.opportunity-item {
+.opportunity-item,
+.report-item {
   border: 1px solid #e1e5dd;
   border-radius: 8px;
   background: #fbfcf8;
@@ -420,7 +600,8 @@ button:disabled {
 }
 
 .activity-item,
-.opportunity-item {
+.opportunity-item,
+.report-item {
   padding: 10px;
 }
 
@@ -430,8 +611,15 @@ button:disabled {
   gap: 10px;
 }
 
+.report-item div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .activity-item strong,
-.opportunity-item strong {
+.opportunity-item strong,
+.report-item strong {
   color: #1d211f;
   font-size: 14px;
 }
@@ -439,6 +627,7 @@ button:disabled {
 .activity-item span,
 .activity-item small,
 .opportunity-item span,
+.report-item span,
 .source-list small {
   color: #68746d;
   font-size: 12px;
@@ -446,13 +635,15 @@ button:disabled {
 }
 
 .activity-item p,
-.opportunity-item p {
+.opportunity-item p,
+.report-item p {
   margin: 7px 0;
   color: #526057;
   font-size: 13px;
 }
 
-.opportunity-item span {
+.opportunity-item span,
+.report-item span {
   display: block;
 }
 
@@ -487,6 +678,16 @@ button:disabled {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .auth-card {
+    flex: 1 1 280px;
+    max-width: none;
   }
 
   .workspace-grid {
@@ -524,6 +725,14 @@ button:disabled {
 
   .topbar {
     padding: 14px;
+  }
+
+  .auth-card {
+    width: 100%;
+  }
+
+  .auth-card span {
+    max-width: 190px;
   }
 
   .graph-edge text {
