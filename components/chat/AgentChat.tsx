@@ -22,12 +22,19 @@ export interface AgentChatProps {
   paywallSlot?: ReactNode;
 }
 
+interface SandboxAnalysis {
+  engine: "daytona";
+  script: string;
+  output: string;
+}
+
 interface Exchange {
   id: number;
   question: string;
   answer?: string;
   cypher?: string;
   highlight?: AgentHighlight;
+  analysis?: SandboxAnalysis;
   error?: string;
   pending: boolean;
 }
@@ -38,6 +45,7 @@ interface AskResponse {
   answer?: string;
   cypher?: string;
   highlight?: AgentHighlight;
+  analysis?: SandboxAnalysis;
   error?: string;
 }
 
@@ -96,6 +104,7 @@ export default function AgentChat({
           answer: data.answer,
           cypher: data.cypher,
           highlight: data.highlight,
+          analysis: data.analysis,
         };
       }
     } catch {
@@ -160,6 +169,25 @@ export default function AgentChat({
                       <pre className="mt-1 overflow-x-auto rounded border border-line bg-surface p-3 font-mono text-xs leading-relaxed text-ink">
                         {e.cypher}
                       </pre>
+                    </details>
+                  )}
+
+                  {e.analysis && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer select-none text-xs text-ink-2">
+                        Sandbox analysis · Daytona
+                      </summary>
+                      <pre className="mt-1 overflow-x-auto rounded border border-line bg-surface p-3 font-mono text-xs leading-relaxed text-ink">
+                        {e.analysis.output}
+                      </pre>
+                      <details className="mt-1">
+                        <summary className="cursor-pointer select-none text-xs text-ink-2">
+                          Script
+                        </summary>
+                        <pre className="mt-1 overflow-x-auto rounded border border-line bg-surface p-3 font-mono text-xs leading-relaxed text-ink">
+                          {e.analysis.script}
+                        </pre>
+                      </details>
                     </details>
                   )}
                 </div>

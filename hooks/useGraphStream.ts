@@ -5,7 +5,7 @@
  * entity/status/insight/done events into an append-only graph state.
  *
  * Node object references are NEVER rebuilt once created: updates merge
- * properties onto the existing object so react-force-graph keeps positions
+ * properties onto the existing object so the graph view keeps positions
  * across incremental adds.
  *
  * Demo insurance: if the EventSource errors before any event arrives

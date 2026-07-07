@@ -26,7 +26,7 @@ export interface DemoGraph {
 }
 
 /**
- * Fresh copies of the fixture graph (react-force-graph mutates node
+ * Fresh copies of the fixture graph (the graph view mutates node
  * objects, so every caller gets its own references).
  */
 export function getDemoGraph(): DemoGraph {
@@ -221,7 +221,7 @@ export async function getSchemaString(): Promise<string> {
 }
 
 /* ------------------------------------------------------------------ */
-/* Graph reads in react-force-graph shape                              */
+/* Graph reads in graph-view shape                              */
 /* ------------------------------------------------------------------ */
 
 interface NodeRow {
@@ -259,7 +259,7 @@ function rowToGraphLink(row: LinkRow): GraphLink {
 }
 
 /**
- * Fetch the full session graph in react-force-graph shape. Source nodes
+ * Fetch the full session graph in graph-view shape. Source nodes
  * are excluded from the viz (each entity carries its source_url property).
  * In demo mode this returns the fixture graph.
  *

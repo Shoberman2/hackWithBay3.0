@@ -120,7 +120,27 @@ export function nodeId(label: NodeLabel, naturalKey: string): string {
 }
 
 /**
- * Convert a validated ExtractedBatch to react-force-graph shapes.
+ * Company favicon via Google's favicon service, derived from the company
+ * website host. Returns undefined when no usable host can be determined --
+ * the graph renderer falls back to its lettered disc, never a broken image.
+ */
+export function companyLogoUrl(website?: string): string | undefined {
+  if (!website) return undefined;
+  let host: string;
+  try {
+    host = new URL(
+      /^https?:\/\//i.test(website) ? website : `https://${website}`,
+    ).hostname;
+  } catch {
+    return undefined;
+  }
+  host = host.replace(/^www\./i, "");
+  if (!host || !host.includes(".")) return undefined;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+}
+
+/**
+ * Convert a validated ExtractedBatch to graph-view shapes.
  * Source nodes are not streamed (provenance lives on source_url props and
  * in the writer's Source/CITED_BY handling), so CITED_BY/EVIDENCED_BY
  * links are skipped here.
@@ -134,7 +154,10 @@ export function batchToGraph(
     nodes.push({ ...props, id: nodeId(label, key), label, name });
   };
 
-  for (const c of batch.companies) push("Company", c.name, c.name, c);
+  for (const c of batch.companies) {
+    const logo_url = companyLogoUrl(c.url);
+    push("Company", c.name, c.name, logo_url ? { ...c, logo_url } : c);
+  }
   for (const f of batch.founders) push("Founder", f.name, f.name, f);
   for (const i of batch.investors) push("Investor", i.name, i.name, i);
   for (const f of batch.features) push("Feature", f.name, f.name, f);
