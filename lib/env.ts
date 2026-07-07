@@ -45,6 +45,11 @@ export const env = {
 
   // Behavior flags
   DEMO_MODE: readBool("DEMO_MODE", true),
+  // Open demo: relax ONLY auth + payments (no login wall, fake-instant
+  // checkout so nobody is charged) while every live integration -- the
+  // LLM gateway, Daytona, RocketRide -- keeps running. For public demo
+  // deploys; leave unset in real production so auth/billing are enforced.
+  PUBLIC_DEMO: readBool("PUBLIC_DEMO", false),
   DEBUG: readBool("DEBUG", false),
 } as const;
 
@@ -84,10 +89,12 @@ export function hasProductHunt(): boolean {
 }
 
 /**
- * The effective demo switch: explicit DEMO_MODE, or any core service
- * unconfigured. Modules should check the specific has* helper for their
- * own service, but this is the global "run on fixtures" signal.
+ * The effective demo switch: explicit DEMO_MODE, or no LLM gateway.
+ * Neo4j is intentionally NOT required — the pipeline runs live from the
+ * gateway + free sources and streams from memory; Neo4j is an optional
+ * persistence layer (writes no-op without it, reads fall back to the
+ * fixture). Modules needing the DB specifically must check hasNeo4j().
  */
 export function isDemoMode(): boolean {
-  return env.DEMO_MODE || !hasNeo4j() || !hasGateway();
+  return env.DEMO_MODE || !hasGateway();
 }

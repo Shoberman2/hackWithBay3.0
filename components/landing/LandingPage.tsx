@@ -3,75 +3,78 @@
 /**
  * Rivalry marketing page. Same design system as the product — paper canvas,
  * ink type, one green accent, node-colors reserved for graph elements —
- * pushed to editorial scale: oversized Geist headings, mono eyebrows,
- * hairline structure, double-bezel cards, staggered blur-up reveals.
+ * pushed to editorial scale with a heavy motion layer: word-by-word
+ * headline reveals, drifting aurora fields, a scroll-progress hairline,
+ * magnetic + sheen CTAs, cursor-spotlight cards, a mouse-tilt hero frame,
+ * count-up stats, an infinite source ticker, and diagrams that draw
+ * themselves as they enter the viewport. All motion is transform/opacity
+ * only and respects prefers-reduced-motion via <MotionConfig>.
+ *
+ * The "Judge demo" button jumps straight into onboarding. On a public-demo
+ * deploy (PUBLIC_DEMO=true) auth + billing are relaxed, so it lands in the
+ * idea input with no sign-in wall while the live pipeline still runs.
  */
 
 import Link from "next/link";
 import { type ReactNode, useRef } from "react";
-import {
-  MotionConfig,
-  motion,
-  useScroll,
-  useTransform,
-} from "framer-motion";
+import { MotionConfig } from "framer-motion";
 import {
   ArrowUpRight,
   ChatCircleText,
   CircleDashed,
   ClockCountdown,
   Crosshair,
+  Gavel,
   GitBranch,
+  Lightning,
   Quotes,
+  ShareNetwork,
   UsersThree,
 } from "@phosphor-icons/react";
 import HeroGraph from "./HeroGraph";
+import {
+  AuroraField,
+  CountUp,
+  EASE,
+  MagneticButton,
+  Marquee,
+  Reveal,
+  ScrollProgress,
+  Spotlight,
+  SpotlightCard,
+  TiltCard,
+  WordReveal,
+  motion,
+  useScroll,
+  useTransform,
+} from "./motion";
 
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const START_HREF = "/start";
 
 /* ---------- primitives ---------- */
-
-function Reveal({
-  children,
-  delay = 0,
-  className,
-}: {
-  children: ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  return (
-    <motion.div
-      className={className}
-      initial={{ opacity: 0, y: 28, filter: "blur(8px)" }}
-      whileInView={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      viewport={{ once: true, margin: "-80px" }}
-      transition={{ duration: 0.9, delay, ease: EASE }}
-    >
-      {children}
-    </motion.div>
-  );
-}
 
 function Eyebrow({ children }: { children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1 font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-ink-2">
-      <span className="h-1 w-1 rounded-full bg-accent" />
+      <span className="h-1 w-1 animate-pulse rounded-full bg-accent" />
       {children}
     </span>
   );
 }
 
+/** Primary CTA: magnetic wrapper + hover sheen sweep + button-in-button icon. */
 function CtaButton({
   href,
   children,
   tone = "accent",
   large = false,
+  icon,
 }: {
   href: string;
   children: ReactNode;
   tone?: "accent" | "ink" | "ghost";
   large?: boolean;
+  icon?: ReactNode;
 }) {
   const shells = {
     accent: "bg-accent text-white",
@@ -84,36 +87,74 @@ function CtaButton({
     ghost: "bg-ink/5 text-ink",
   } as const;
   return (
-    <Link
-      href={href}
-      className={`group inline-flex items-center gap-3 rounded-full font-medium tracking-tight transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.98] ${shells[tone]} ${
-        large ? "py-2.5 pl-7 pr-2.5 text-lg" : "py-2 pl-5 pr-2 text-sm"
-      }`}
-    >
-      {children}
-      <span
-        className={`flex items-center justify-center rounded-full transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:scale-105 ${wells[tone]} ${large ? "h-10 w-10" : "h-7 w-7"}`}
+    <MagneticButton>
+      <Link
+        href={href}
+        className={`group relative inline-flex items-center gap-3 overflow-hidden rounded-full font-medium tracking-tight transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] active:scale-[0.97] ${shells[tone]} ${
+          large ? "py-2.5 pl-7 pr-2.5 text-lg" : "py-2 pl-5 pr-2 text-sm"
+        }`}
       >
-        <ArrowUpRight size={large ? 18 : 14} weight="light" />
-      </span>
-    </Link>
+        {/* sheen */}
+        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-full">
+          <span className="absolute inset-y-0 -left-1/3 w-1/3 -skew-x-12 bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-0 group-hover:opacity-100 group-hover:animate-[cta-sheen_0.9s_ease-out]" />
+        </span>
+        <span className="relative flex items-center gap-2">
+          {icon}
+          {children}
+        </span>
+        <span
+          className={`relative flex items-center justify-center rounded-full transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:-translate-y-px group-hover:translate-x-0.5 group-hover:scale-105 ${wells[tone]} ${large ? "h-10 w-10" : "h-7 w-7"}`}
+        >
+          <ArrowUpRight size={large ? 18 : 14} weight="light" />
+        </span>
+      </Link>
+    </MagneticButton>
   );
 }
 
-/* ---------- feature-card mini diagrams ---------- */
+/* ---------- feature-card mini diagrams (draw on view) ---------- */
+
+const inView = { once: true, margin: "-60px" } as const;
 
 function SharedInvestorDiagram() {
   return (
-    <svg viewBox="0 0 260 96" className="w-full" aria-hidden>
-      <line x1="52" y1="66" x2="130" y2="28" stroke="var(--node-investor)" strokeWidth="1.4" />
-      <line x1="208" y1="66" x2="130" y2="28" stroke="var(--node-investor)" strokeWidth="1.4" />
-      <circle cx="130" cy="28" r="8" fill="var(--node-investor)" />
-      <circle cx="52" cy="66" r="9" fill="var(--node-company)" />
-      <circle cx="208" cy="66" r="9" fill="var(--node-company)" />
+    <motion.svg viewBox="0 0 260 96" className="w-full" aria-hidden initial="hide" whileInView="show" viewport={inView}>
+      {[
+        ["52", "66", "130", "28"],
+        ["208", "66", "130", "28"],
+      ].map(([x1, y1, x2, y2], i) => (
+        <motion.line
+          key={i}
+          x1={x1}
+          y1={y1}
+          x2={x2}
+          y2={y2}
+          stroke="var(--node-investor)"
+          strokeWidth="1.4"
+          variants={{ hide: { pathLength: 0, opacity: 0 }, show: { pathLength: 1, opacity: 1 } }}
+          transition={{ duration: 0.7, delay: 0.15 + i * 0.1, ease: EASE }}
+        />
+      ))}
+      {[
+        ["130", "28", "8", "var(--node-investor)", 0.3],
+        ["52", "66", "9", "var(--node-company)", 0],
+        ["208", "66", "9", "var(--node-company)", 0.1],
+      ].map(([cx, cy, r, fill, d], i) => (
+        <motion.circle
+          key={i}
+          cx={cx}
+          cy={cy}
+          r={r}
+          fill={fill as string}
+          variants={{ hide: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 1 } }}
+          style={{ transformOrigin: `${cx}px ${cy}px` }}
+          transition={{ type: "spring", stiffness: 300, damping: 16, delay: d as number }}
+        />
+      ))}
       <text x="130" y="12" textAnchor="middle" fontSize="9" letterSpacing="0.1em" className="fill-[var(--ink-2)] font-mono">LEAD INVESTOR</text>
       <text x="52" y="88" textAnchor="middle" fontSize="9" letterSpacing="0.1em" className="fill-[var(--ink-2)] font-mono">RIVAL A</text>
       <text x="208" y="88" textAnchor="middle" fontSize="9" letterSpacing="0.1em" className="fill-[var(--ink-2)] font-mono">RIVAL B</text>
-    </svg>
+    </motion.svg>
   );
 }
 
@@ -123,36 +164,71 @@ function ClusterDiagram() {
     [150, 30], [166, 42], [158, 56], [140, 46],
   ] as const;
   return (
-    <svg viewBox="0 0 260 84" className="w-full" aria-hidden>
+    <motion.svg viewBox="0 0 260 84" className="w-full" aria-hidden initial="hide" whileInView="show" viewport={inView}>
       {dots.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r="5" fill={i < 5 ? "var(--node-company)" : "var(--node-segment)"} opacity="0.85" />
+        <motion.circle
+          key={i}
+          cx={x}
+          cy={y}
+          r="5"
+          fill={i < 5 ? "var(--node-company)" : "var(--node-segment)"}
+          variants={{ hide: { scale: 0, opacity: 0 }, show: { scale: 1, opacity: 0.85 } }}
+          style={{ transformOrigin: `${x}px ${y}px` }}
+          transition={{ type: "spring", stiffness: 320, damping: 15, delay: i * 0.05 }}
+        />
       ))}
-      <circle cx="222" cy="42" r="22" fill="none" stroke="var(--accent)" strokeWidth="1.2" strokeDasharray="3 5" />
+      <motion.circle
+        cx="222"
+        cy="42"
+        r="22"
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="1.2"
+        strokeDasharray="3 5"
+        variants={{ hide: { scale: 0.5, opacity: 0 }, show: { scale: 1, opacity: 1, rotate: 360 } }}
+        style={{ transformOrigin: "222px 42px" }}
+        transition={{ duration: 0.9, delay: 0.5, ease: EASE }}
+      />
       <text x="222" y="78" textAnchor="middle" fontSize="9" letterSpacing="0.1em" className="fill-[var(--accent)] font-mono">WHITE SPACE</text>
-    </svg>
+    </motion.svg>
   );
 }
 
 function LagDiagram() {
   const rows = [
-    { y: 18, w: 150, lag: null },
+    { y: 18, w: 150, lag: null as string | null },
     { y: 40, w: 116, lag: "+34d" },
     { y: 62, w: 84, lag: "+87d" },
   ];
   return (
-    <svg viewBox="0 0 260 84" className="w-full" aria-hidden>
+    <motion.svg viewBox="0 0 260 84" className="w-full" aria-hidden initial="hide" whileInView="show" viewport={inView}>
       {rows.map((r, i) => (
         <g key={i}>
-          <rect x="8" y={r.y - 5} width={r.w} height="10" rx="5" fill={i === 0 ? "var(--node-launch)" : "var(--border)"} opacity={i === 0 ? 0.9 : 1} />
-          {r.lag && (
-            <text x={r.w + 18} y={r.y + 3} fontSize="9" letterSpacing="0.08em" className="fill-[var(--ink-2)] font-mono">{r.lag}</text>
-          )}
-          {!r.lag && (
-            <text x={r.w + 18} y={r.y + 3} fontSize="9" letterSpacing="0.08em" className="fill-[var(--node-launch)] font-mono">SHIPS FIRST</text>
-          )}
+          <motion.rect
+            x="8"
+            y={r.y - 5}
+            width={r.w}
+            height="10"
+            rx="5"
+            fill={i === 0 ? "var(--node-launch)" : "var(--border)"}
+            variants={{ hide: { scaleX: 0, opacity: 0 }, show: { scaleX: 1, opacity: i === 0 ? 0.9 : 1 } }}
+            style={{ transformOrigin: "8px 0px" }}
+            transition={{ duration: 0.6, delay: 0.15 + i * 0.14, ease: EASE }}
+          />
+          <motion.text
+            x={r.w + 18}
+            y={r.y + 3}
+            fontSize="9"
+            letterSpacing="0.08em"
+            className={r.lag ? "fill-[var(--ink-2)] font-mono" : "fill-[var(--node-launch)] font-mono"}
+            variants={{ hide: { opacity: 0 }, show: { opacity: 1 } }}
+            transition={{ duration: 0.4, delay: 0.5 + i * 0.14 }}
+          >
+            {r.lag ?? "SHIPS FIRST"}
+          </motion.text>
         </g>
       ))}
-    </svg>
+    </motion.svg>
   );
 }
 
@@ -183,17 +259,22 @@ function Nav() {
             <a
               key={href}
               href={href}
-              className="rounded-full px-3.5 py-1.5 text-sm text-ink-2 transition-colors duration-300 hover:text-ink"
+              className="group relative rounded-full px-3.5 py-1.5 text-sm text-ink-2 transition-colors duration-300 hover:text-ink"
             >
               {label}
+              <span className="absolute inset-x-3.5 -bottom-0.5 h-px origin-left scale-x-0 bg-accent transition-transform duration-300 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:scale-x-100" />
             </a>
           ))}
         </nav>
         <Link
-          href="/start"
-          className="ml-1 rounded-full bg-ink px-4 py-2 text-sm font-medium text-white transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:scale-[1.03] active:scale-[0.98]"
+          href={START_HREF}
+          className="group ml-1 flex items-center gap-2 rounded-full bg-ink py-2 pl-4 pr-2 text-sm font-medium text-white transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] hover:scale-[1.03] active:scale-[0.98]"
         >
-          Try it out
+          <Gavel size={15} weight="light" />
+          Judge demo
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-white/15 transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:translate-x-0.5">
+            <ArrowUpRight size={13} weight="light" />
+          </span>
         </Link>
       </div>
     </motion.header>
@@ -231,13 +312,7 @@ function Hero() {
           backgroundSize: "26px 26px",
         }}
       />
-      <div
-        className="pointer-events-none absolute -top-48 right-[-14%] h-[560px] w-[560px] rounded-full opacity-[0.09] blur-3xl"
-        style={{
-          background:
-            "radial-gradient(circle, var(--accent) 0%, transparent 65%)",
-        }}
-      />
+      <AuroraField />
 
       <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-14 px-6 pb-24 pt-36 md:pt-44 lg:grid-cols-12 lg:gap-8 lg:pb-32">
         <div className="lg:col-span-6">
@@ -260,7 +335,7 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.75, ease: EASE }}
           >
-            Type your idea in plain language. Rivalry assembles the companies,
+            Type any idea in plain language. Rivalry assembles the companies,
             founders, investors, and features around it into a live graph —
             in front of you, every claim cited.
           </motion.p>
@@ -271,18 +346,12 @@ function Hero() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9, delay: 0.9, ease: EASE }}
           >
-            <CtaButton href="/start">Try it out</CtaButton>
-            <Link
-              href="/session/demo"
-              className="group inline-flex items-center gap-2 text-sm font-medium text-ink-2 transition-colors duration-300 hover:text-ink"
-            >
-              Explore the live demo
-              <ArrowUpRight
-                size={14}
-                weight="light"
-                className="transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover:-translate-y-px group-hover:translate-x-0.5"
-              />
-            </Link>
+            <CtaButton href={START_HREF} icon={<Gavel size={17} weight="light" />}>
+              Judge demo
+            </CtaButton>
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-ink-2/80">
+              No sign-up · jumps straight in
+            </span>
           </motion.div>
 
           <motion.p
@@ -295,7 +364,7 @@ function Hero() {
           </motion.p>
         </div>
 
-        {/* double-bezel graph frame */}
+        {/* mouse-tilt, double-bezel graph frame */}
         <motion.div
           className="lg:col-span-6"
           style={{ y: graphY }}
@@ -303,7 +372,7 @@ function Hero() {
           animate={{ opacity: 1, filter: "blur(0px)" }}
           transition={{ duration: 1.1, delay: 0.5, ease: EASE }}
         >
-          <div className="rounded-[2rem] border border-line/70 bg-ink/[0.03] p-2">
+          <TiltCard className="rounded-[2rem] border border-line/70 bg-ink/[0.03] p-2">
             <div className="relative overflow-hidden rounded-[calc(2rem-0.5rem)] border border-line bg-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_24px_64px_-32px_rgba(17,17,17,0.2)]">
               <div
                 className="pointer-events-none absolute inset-0 opacity-60"
@@ -322,12 +391,38 @@ function Hero() {
                   Assembling
                 </span>
               </div>
+              {/* looping assembly progress bar */}
+              <div className="relative h-px w-full overflow-hidden bg-line">
+                <motion.span
+                  className="absolute inset-y-0 left-0 w-1/3 bg-accent"
+                  animate={{ x: ["-100%", "400%"] }}
+                  transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+                />
+              </div>
               <div className="aspect-[660/560] w-full">
                 <HeroGraph />
               </div>
             </div>
-          </div>
+          </TiltCard>
         </motion.div>
+      </div>
+
+      {/* source ticker */}
+      <div className="relative border-y border-line/70 bg-surface/60 py-4">
+        <Marquee duration={30}>
+          {[
+            "Hacker News", "Product Hunt", "YC Directory", "GitHub", "Crunchbase-style funding",
+            "Wayback snapshots", "Founder LinkedIn", "Launch posts", "Open web search",
+          ].map((s) => (
+            <span
+              key={s}
+              className="mx-5 inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-2/70"
+            >
+              <span className="h-1 w-1 rounded-full bg-accent/60" />
+              {s}
+            </span>
+          ))}
+        </Marquee>
       </div>
     </section>
   );
@@ -368,11 +463,38 @@ function Problem() {
   );
 }
 
+const STATS = [
+  { to: 13, suffix: "", label: "Node types", sub: "companies → moat claims" },
+  { to: 19, suffix: "", label: "Relationship types", sub: "the edges are the signal" },
+  { to: 5, suffix: "", label: "Graph algorithms", sub: "Louvain, PageRank & more" },
+  { to: 40, suffix: "", label: "Browser tabs, replaced", sub: "by one live graph" },
+];
+
+function StatsBand() {
+  return (
+    <section className="border-t border-line bg-ink text-white">
+      <div className="mx-auto grid max-w-6xl grid-cols-2 gap-y-12 px-6 py-20 md:grid-cols-4 md:py-24">
+        {STATS.map((s, i) => (
+          <Reveal key={s.label} delay={i * 0.1} className="text-center md:text-left">
+            <p className="text-5xl font-semibold tracking-tight md:text-6xl">
+              <CountUp to={s.to} suffix={s.suffix} />
+            </p>
+            <p className="mt-3 text-sm font-medium tracking-tight">{s.label}</p>
+            <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-white/45">
+              {s.sub}
+            </p>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 const STEPS = [
   {
     n: "01",
     title: "Type the idea",
-    body: "One line is enough. “Internship platform.” No forms, no category pickers, no setup.",
+    body: "One line is enough. Any market. No forms, no category pickers, no setup.",
   },
   {
     n: "02",
@@ -400,7 +522,7 @@ function HowItWorks() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="mt-8 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight md:text-5xl">
-            From one sentence to a living landscape.
+            <WordReveal text="From one sentence to a living landscape." />
           </h2>
         </Reveal>
         <div className="mt-20 grid grid-cols-1 gap-x-10 gap-y-14 md:grid-cols-2 lg:grid-cols-4">
@@ -426,22 +548,25 @@ function HowItWorks() {
 function Card({
   children,
   className = "",
+  spotlight = true,
 }: {
   children: ReactNode;
   className?: string;
+  spotlight?: boolean;
 }) {
   return (
-    <div className={`rounded-[1.75rem] border border-line/70 bg-ink/[0.03] p-1.5 ${className}`}>
-      <div className="flex h-full flex-col rounded-[calc(1.75rem-0.375rem)] border border-line bg-white p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)]">
-        {children}
+    <SpotlightCard className={`rounded-[1.75rem] border border-line/70 bg-ink/[0.03] p-1.5 ${className}`}>
+      <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(1.75rem-0.375rem)] border border-line bg-white p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)]">
+        {spotlight && <Spotlight className="group-hover/spot:opacity-100" />}
+        <div className="relative flex h-full flex-col">{children}</div>
       </div>
-    </div>
+    </SpotlightCard>
   );
 }
 
 function CardIcon({ children }: { children: ReactNode }) {
   return (
-    <span className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink">
+    <span className="mb-5 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-line bg-surface text-ink transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] group-hover/spot:-translate-y-0.5 group-hover/spot:text-accent">
       {children}
     </span>
   );
@@ -456,7 +581,7 @@ function Features() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="mt-8 max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight md:text-5xl">
-            Signals a spreadsheet can&apos;t hold.
+            <WordReveal text="Signals a spreadsheet can't hold." />
           </h2>
         </Reveal>
 
@@ -476,17 +601,29 @@ function Features() {
                 Answers come back with the paths that produced them.
               </p>
               <div className="mt-7 space-y-3">
-                <div className="ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm text-white">
+                <motion.div
+                  className="ml-auto w-fit max-w-full rounded-2xl rounded-br-md bg-ink px-4 py-2.5 text-sm text-white"
+                  initial={{ opacity: 0, x: 20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={inView}
+                  transition={{ duration: 0.6, ease: EASE }}
+                >
                   Which of these companies share investors?
-                </div>
-                <div className="w-fit max-w-full rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-2.5">
+                </motion.div>
+                <motion.div
+                  className="w-fit max-w-full rounded-2xl rounded-bl-md border border-line bg-surface px-4 py-2.5"
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  viewport={inView}
+                  transition={{ duration: 0.6, delay: 0.35, ease: EASE }}
+                >
                   <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-accent">
                     2-hop traversal · 3 paths found
                   </span>
                   <code className="mt-1.5 block font-mono text-xs text-ink-2">
                     MATCH (a)&lt;-[:INVESTED_IN]-(v)-[:INVESTED_IN]-&gt;(b)
                   </code>
-                </div>
+                </motion.div>
               </div>
             </Card>
           </Reveal>
@@ -625,7 +762,7 @@ function Pricing() {
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="mt-8 max-w-2xl text-4xl font-semibold leading-[1.08] tracking-tight md:text-5xl">
-            The map is free. The playbook is one purchase.
+            <WordReveal text="The map is free. The playbook is one purchase." />
           </h2>
         </Reveal>
 
@@ -649,46 +786,49 @@ function Pricing() {
                 ))}
               </ul>
               <div className="mt-auto pt-10">
-                <CtaButton href="/start" tone="ghost">
-                  Try it out
+                <CtaButton href={START_HREF} tone="ghost" icon={<Gavel size={15} weight="light" />}>
+                  Judge demo
                 </CtaButton>
               </div>
             </Card>
           </Reveal>
 
           <Reveal delay={0.12}>
-            <div className="h-full rounded-[1.75rem] border border-accent/25 bg-accent/[0.04] p-1.5">
-              <div className="flex h-full flex-col rounded-[calc(1.75rem-0.375rem)] border border-line bg-white p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)]">
-                <span className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
-                    Landscape report
+            <SpotlightCard className="h-full rounded-[1.75rem] border border-accent/25 bg-accent/[0.04] p-1.5">
+              <div className="relative flex h-full flex-col overflow-hidden rounded-[calc(1.75rem-0.375rem)] border border-line bg-white p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9)]">
+                <Spotlight className="group-hover/spot:opacity-100" />
+                <div className="relative flex h-full flex-col">
+                  <span className="flex items-center justify-between">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-accent">
+                      Landscape report
+                    </span>
+                    <span className="rounded-full bg-wash-green px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
+                      One-time
+                    </span>
                   </span>
-                  <span className="rounded-full bg-wash-green px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-accent">
-                    One-time
-                  </span>
-                </span>
-                <p className="mt-4 text-5xl font-semibold tracking-tight">
-                  One purchase
-                </p>
-                <ul className="mt-8 space-y-3.5 text-ink-2">
-                  {[
-                    "Full written report generated from your graph",
-                    "Competitive clusters and white-space analysis",
-                    "Founder pattern analysis across the space",
-                    "A positioning recommendation you can act on",
-                    "Unlimited agent questions",
-                  ].map((f) => (
-                    <li key={f} className="flex gap-3 leading-relaxed">
-                      <span className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-auto pt-10">
-                  <CtaButton href="/start">Start free, upgrade in-app</CtaButton>
+                  <p className="mt-4 text-5xl font-semibold tracking-tight">
+                    One purchase
+                  </p>
+                  <ul className="mt-8 space-y-3.5 text-ink-2">
+                    {[
+                      "Full written report generated from your graph",
+                      "Competitive clusters and white-space analysis",
+                      "Founder pattern analysis across the space",
+                      "A positioning recommendation you can act on",
+                      "Unlimited agent questions",
+                    ].map((f) => (
+                      <li key={f} className="flex gap-3 leading-relaxed">
+                        <span className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-accent" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="mt-auto pt-10">
+                    <CtaButton href={START_HREF}>Start free, upgrade in-app</CtaButton>
+                  </div>
                 </div>
               </div>
-            </div>
+            </SpotlightCard>
           </Reveal>
         </div>
       </div>
@@ -706,34 +846,31 @@ function FinalCta() {
           backgroundSize: "26px 26px",
         }}
       />
+      <AuroraField tone="cool" />
       <div className="relative mx-auto max-w-4xl px-6 py-32 text-center md:py-44">
         <Reveal>
           <Eyebrow>Day zero starts now</Eyebrow>
         </Reveal>
         <Reveal delay={0.1}>
           <h2 className="mt-8 text-5xl font-semibold leading-[1.05] tracking-tight md:text-7xl">
-            The landscape is
-            <br />
-            already forming.
+            <WordReveal text="The landscape is already forming." />
           </h2>
         </Reveal>
         <Reveal delay={0.22}>
           <p className="mx-auto mt-8 max-w-md text-lg leading-relaxed text-ink-2">
-            Type one sentence. Watch who&apos;s already building your idea —
-            and where they&apos;ve left you room.
+            Type one sentence about any market. Watch who&apos;s already
+            building it — and where they&apos;ve left you room.
           </p>
         </Reveal>
         <Reveal delay={0.34}>
-          <div className="mt-12 flex flex-col items-center gap-5">
-            <CtaButton href="/start" large>
-              Try it out
+          <div className="mt-12 flex flex-col items-center gap-4">
+            <CtaButton href={START_HREF} large icon={<Gavel size={20} weight="light" />}>
+              Judge demo
             </CtaButton>
-            <Link
-              href="/session/demo"
-              className="text-sm text-ink-2 underline decoration-line underline-offset-4 transition-colors duration-300 hover:text-ink"
-            >
-              or explore the live demo first
-            </Link>
+            <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.16em] text-ink-2/80">
+              <Lightning size={13} weight="fill" className="text-accent" />
+              No sign-up · straight into onboarding
+            </span>
           </div>
         </Reveal>
       </div>
@@ -745,7 +882,8 @@ function Footer() {
   return (
     <footer className="border-t border-line">
       <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-10 md:flex-row md:items-center md:justify-between">
-        <p className="text-sm text-ink-2">
+        <p className="flex items-center gap-2 text-sm text-ink-2">
+          <ShareNetwork size={16} weight="light" className="text-accent" />
           <span className="font-semibold text-ink">Rivalry</span> — competitive
           landscape graphs for idea-stage founders.
         </p>
@@ -771,10 +909,12 @@ export default function LandingPage() {
               "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
           }}
         />
+        <ScrollProgress />
         <Nav />
         <main>
           <Hero />
           <Problem />
+          <StatsBand />
           <HowItWorks />
           <Features />
           <Pricing />

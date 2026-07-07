@@ -144,13 +144,20 @@ function buildRows(nodes: GraphNode[], links: GraphLink[]): Row[] {
 
 export default function SummaryTable({
   sessionId,
+  nodes,
+  links,
   onSelectCompany,
   selectedId,
 }: {
   sessionId: string;
+  /** Live landscape from the session page. When present (a real idea run)
+   *  the table renders it directly instead of fetching the fixture. */
+  nodes?: GraphNode[];
+  links?: GraphLink[];
   onSelectCompany?: (id: string) => void;
   selectedId?: string | null;
 }) {
+  const hasLiveData = Array.isArray(nodes) && nodes.length > 0;
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
     nodes: fixture.nodes,
     links: fixture.links,
@@ -159,6 +166,8 @@ export default function SummaryTable({
   const [descending, setDescending] = useState(true);
 
   useEffect(() => {
+    // Live data supplied by the parent: don't fetch the fixture.
+    if (hasLiveData) return;
     let cancelled = false;
     fetch(`/api/graph/${encodeURIComponent(sessionId)}`)
       .then((res) => (res.ok ? res.json() : null))
@@ -170,9 +179,15 @@ export default function SummaryTable({
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, hasLiveData]);
 
-  const rows = useMemo(() => buildRows(graph.nodes, graph.links), [graph]);
+  const effectiveGraph = hasLiveData
+    ? { nodes: nodes as GraphNode[], links: links ?? [] }
+    : graph;
+  const rows = useMemo(
+    () => buildRows(effectiveGraph.nodes, effectiveGraph.links),
+    [effectiveGraph],
+  );
   const maxRaised = useMemo(() => Math.max(1, ...rows.map((r) => r.raised)), [rows]);
   const maxCentrality = useMemo(
     () => Math.max(0.0001, ...rows.map((r) => r.centrality)),

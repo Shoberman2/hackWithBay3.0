@@ -1,6 +1,6 @@
 /**
  * Onboarding interview agent. Asks ONE sharpening question at a time,
- * 4-6 total, along the ambiguity axes from README section 3. The final
+ * 6-8 total, along the ambiguity axes from README section 3. The final
  * turn returns an OnboardingResult (zod-parsed JSON).
  *
  * Convention for `history`: a full chat transcript where the FIRST user
@@ -23,8 +23,8 @@ export interface OnboardingTurn {
   done: boolean;
 }
 
-const MIN_QUESTIONS = 4;
-const MAX_QUESTIONS = 6;
+const MIN_QUESTIONS = 6;
+const MAX_QUESTIONS = 8;
 
 const resultSchema = z.object({
   refined_idea: z.string().min(1),
@@ -46,35 +46,48 @@ const turnSchema = z.object({
 const SCRIPT: Array<{ question: string; options: string[] }> = [
   {
     question:
-      "Is this a marketplace connecting both sides, or software that one side buys?",
+      "What shape is the product closest to?",
     options: [
       "Two-sided marketplace",
-      "Employer software (ATS)",
-      "University career-center tool",
-      "Not sure yet",
+      "Workflow / SaaS tool",
+      "API or infrastructure",
+      "Community or network",
     ],
   },
   {
-    question: "Who pays?",
-    options: ["Employers", "Students", "Universities", "Undecided"],
+    question: "Who is the primary customer?",
+    options: ["Consumers", "Small businesses", "Enterprises", "Not sure yet"],
+  },
+  {
+    question: "Who actually pays?",
+    options: [
+      "The end user",
+      "A business buyer",
+      "Advertisers or partners",
+      "Undecided",
+    ],
   },
   {
     question: "Where do you start geographically?",
     options: ["US only", "US first, global later", "Global from day one"],
   },
   {
-    question:
-      "Do you reach students through university partnerships or directly?",
-    options: ["University-partnered", "Direct to students", "Both"],
+    question: "How do the first users find it?",
+    options: [
+      "Search and direct signup",
+      "Sales outreach",
+      "Partners or institutions",
+      "Word of mouth / community",
+    ],
   },
   {
     question:
       "Which one thing must be different from what already exists?",
     options: [
-      "Matching quality",
-      "International / visa support",
-      "Employer tooling",
-      "Community and peers",
+      "Better matching or quality",
+      "Price or business model",
+      "An underserved niche",
+      "Speed and experience",
     ],
   },
 ];
@@ -126,21 +139,25 @@ function scriptedTurn(history: ChatMessage[]): OnboardingTurn {
 /* Live agent                                                          */
 /* ------------------------------------------------------------------ */
 
-const SYSTEM_PROMPT = `You are the onboarding interviewer for Rivalry, a competitive-landscape tool for idea-stage founders. The founder just typed a one-line idea. Your job is to sharpen it with ${MIN_QUESTIONS} to ${MAX_QUESTIONS} short questions, asked ONE at a time, covering these axes:
-1. Marketplace vs software one side buys (e.g. ATS).
-2. Which side pays.
-3. Geography (US only, US-first, global).
-4. Distribution: university-partnered vs direct.
-5. The one feature that must be different from incumbents.
+const SYSTEM_PROMPT = `You are the onboarding interviewer for Rivalry, a competitive-landscape tool for idea-stage founders. The founder just typed a one-line idea. Your job is to sharpen it with ${MIN_QUESTIONS} to ${MAX_QUESTIONS} short questions, asked ONE at a time. Cover these axes, phrasing every question in the concrete vocabulary of THIS founder's idea (never generic boilerplate):
+1. Product shape: marketplace, workflow/SaaS tool, API/infrastructure, or community.
+2. The primary customer / target user.
+3. Which side pays, and the pricing or business model.
+4. Geography (US only, US-first, global).
+5. Distribution: how the first users are reached (direct, sales, partners, community).
+6. The one thing that must be different from incumbents.
+7. Which existing companies or products the founder already sees as competitors.
+8. Stage: is anything built or launched yet, and what traction exists.
 
 Rules:
-- Ask exactly one question per turn. Never repeat an axis already answered.
-- Each question comes with 3-4 short suggested options (2-5 words each).
-- After the final answer, finish with the result instead of a question.
+- Ask exactly one question per turn. Never repeat an axis already answered; skip an axis the founder's idea or earlier answers already settle.
+- Each question comes with 3-4 short suggested options (2-5 words each), tailored to the idea.
+- Do NOT finish before ${MIN_QUESTIONS} answers. After ${MIN_QUESTIONS}-${MAX_QUESTIONS} answers, finish with the result instead of a question.
 - Respond ONLY with minified JSON, no markdown, in one of two shapes:
   While asking: {"question": string, "options": string[], "done": false}
   When finished: {"done": true, "result": {"refined_idea": string, "tags": string[], "search_terms": string[]}}
-- "tags" are short kebab-case labels for the chosen positioning; "search_terms" are 3-6 web-search queries for discovering competitors.`;
+- "refined_idea" is 1-2 sentences capturing the positioning the answers pinned down.
+- "tags" are short kebab-case labels for the chosen positioning; "search_terms" are 4-8 web-search queries for discovering competitors, including any competitor names the founder mentioned.`;
 
 function stripFences(text: string): string {
   return text

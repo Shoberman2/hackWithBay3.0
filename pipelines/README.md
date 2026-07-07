@@ -56,3 +56,34 @@ webhook_1 (source)  -->  llm_extract (LLM via Butterbase gateway)  -->  response
   through the Butterbase gateway (`lib/pipeline/extract.ts`) with the
   identical prompt and validation, and the pipeline conductor notes in
   the SSE event stream that extraction ran locally.
+
+## rivalry-monitor.pipe
+
+The classification stage of the news monitor (`lib/monitor.ts`). The fetch
+stage is NOT this pipe: raw documents are gathered by a fixed Python agent
+running inside a **Daytona sandbox** (TechCrunch venture RSS, one Google
+News RSS query per watchlist company, Hacker News via Algolia — all
+outbound fetching happens in the sandbox, never in the app process).
+
+### Topology
+
+```
+webhook_1 (source)  -->  llm_classify (LLM via Butterbase gateway)  -->  response_1 (JSON out)
+        data lane                    text lane
+```
+
+- **`webhook_1`** — receives `{ companies: string[], tags: string[], raw_documents: RawDoc[] }`
+  sent by `lib/monitor.ts` through the shared `invokePipe()` helper in
+  `lib/rocketride.ts` (SDK WebSocket, same pattern as extraction).
+- **`llm_classify`** — OpenAI-compatible LLM node pointed at the Butterbase
+  gateway (`${ROCKETRIDE_BUTTERBASE_AI_KEY}` injected at `use()` time).
+  Emits `{"signals": [...]}` — one entry per underlying story with
+  `kind` (funding | launch | acquisition | shutdown | product | market | other),
+  `companies_mentioned`, `relevance` 0-1 (items under 0.3 dropped), and a
+  one-sentence grounded `summary`. URLs and dates copied verbatim from input.
+- **`response_1`** — returns the JSON synchronously; `lib/monitor.ts`
+  zod-validates with `newsSignalSchema` before anything reaches the UI.
+
+Fallback ladder when the pipe or its deps are unavailable: gateway
+classification -> keyword heuristic -> canned demo signals (see
+`lib/monitor.ts`).

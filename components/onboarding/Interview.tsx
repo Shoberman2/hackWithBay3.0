@@ -32,10 +32,18 @@ interface AgentOnboardingResponse {
 }
 
 /* ------------------------------------------------------------------ */
-/* Local fallback flow (4 sharpening questions, works for any idea)    */
+/* Local fallback flow (7 sharpening questions, works for any idea)    */
 /* ------------------------------------------------------------------ */
 
 const FALLBACK_QUESTIONS: InterviewQuestion[] = [
+  {
+    text: "What shape is it closest to?",
+    options: ["Marketplace", "Workflow tool", "API or infrastructure", "Community or network"],
+  },
+  {
+    text: "Who is it for?",
+    options: ["Consumers", "Small businesses", "Enterprises", "Developers"],
+  },
   {
     text: "Who pays for it?",
     options: ["Consumers", "Small businesses", "Enterprises", "Both sides of a marketplace"],
@@ -49,12 +57,16 @@ const FALLBACK_QUESTIONS: InterviewQuestion[] = [
     options: ["United States", "Europe", "Global from day one"],
   },
   {
-    text: "What shape is it closest to?",
-    options: ["Marketplace", "Workflow tool", "API or infrastructure", "Community or network"],
+    text: "What must be different from what exists today?",
+    options: ["Better quality or matching", "Price or business model", "An underserved niche", "Speed and experience"],
+  },
+  {
+    text: "Which competitor worries you most?",
+    options: ["A big incumbent", "Another startup", "Spreadsheets / DIY", "None that I know of"],
   },
 ];
 
-const TOTAL_QUESTIONS = 4;
+const TOTAL_QUESTIONS = FALLBACK_QUESTIONS.length;
 
 const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 

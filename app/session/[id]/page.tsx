@@ -18,6 +18,7 @@ import SummaryTable from "@/components/graph/SummaryTable";
 import NodeDetailPanel from "@/components/graph/NodeDetailPanel";
 import CompanyTimeline from "@/components/graph/CompanyTimeline";
 import InsightCards from "@/components/graph/InsightCards";
+import MonitorPanel from "@/components/graph/MonitorPanel";
 import GraphLegend from "@/components/graph/GraphLegend";
 import StreamStatus from "@/components/graph/StreamStatus";
 import PaywallCard from "@/components/report/PaywallCard";
@@ -52,6 +53,7 @@ export default function SessionPage({
   const { user, loading: authLoading, refresh: refreshAuth } = useAuth();
   const {
     data,
+    fullData,
     status,
     insights,
     expand,
@@ -204,6 +206,8 @@ export default function SessionPage({
           <div className="h-full pt-16">
             <SummaryTable
               sessionId={id}
+              nodes={fullData.nodes}
+              links={fullData.links}
               selectedId={selected?.id ?? null}
               onSelectCompany={handleSelectCompany}
             />
@@ -288,6 +292,8 @@ export default function SessionPage({
             highlight={highlight}
             onHighlight={handleHighlight}
           />
+
+          <MonitorPanel sessionId={id} />
 
           <div className="border-t border-line px-5 py-4">
             <button

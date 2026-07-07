@@ -122,9 +122,13 @@ Built locally in the RocketRide VS Code extension, deployed to cloud.rocketride.
 
 Agent memory across sessions. When a founder returns or refines their idea, the agent remembers what it already ingested and only fetches deltas. Also remembers the founder's own context ("user cares about the university-partnered segment") so follow-up questions get sharper. Cheap points, natural fit.
 
-### Daytona (integrated)
+### Daytona (integrated) — two lanes
 
-Gives the Q&A agent a compute lane the graph query can't cover. When a founder asks a quantitative question (rankings, averages, distributions, funding totals), the agent writes a small Python script and executes it in a disposable Daytona sandbox with the exported session graph mounted as JSON — LLM-generated code never runs in the app process. The sandbox output feeds the final answer and is shown in the chat under "Sandbox analysis · Daytona". Demo mode and missing credentials skip the pass cleanly; the agent then answers from the graph traversal alone.
+**1. Q&A compute lane.** When a founder asks a quantitative question (rankings, averages, distributions, funding totals), the agent writes a small Python script and executes it in a disposable Daytona sandbox with the exported session graph mounted as JSON — LLM-generated code never runs in the app process. The sandbox output feeds the final answer and is shown in the chat under "Sandbox analysis · Daytona".
+
+**2. News-monitor agent (with RocketRide).** A Daytona sandbox agent watches the famous startup-news platforms — TechCrunch, Google News, Hacker News — for funding, launches, acquisitions, and shutdowns across the session's watchlist. The agent attempts a live pull of each platform from inside the sandbox and always dedups + relevance-scores + kind-tags every document against the watchlist; the RocketRide-hosted `rivalry-monitor` pipe then classifies the result into typed `NewsSignal`s (via the Butterbase gateway). Rendered in the right rail as the **News monitor** panel (on-demand "Scan for news"). See `lib/monitor.ts` and `pipelines/rivalry-monitor.pipe`.
+
+Both lanes degrade cleanly: demo mode and missing credentials fall back to canned/heuristic results so the product never dead-ends. *Note: some Daytona accounts restrict sandbox outbound egress; when the sandbox can't reach the news hosts the agent still runs its scoring compute over app-fetched seed documents, and the `reachedLive` field reports which hosts (if any) were pulled live.*
 
 ## 6. Data Sources
 

@@ -79,6 +79,48 @@ body {
   animation-delay: calc(var(--index, 0) * 80ms);
 }
 
+/* Infinite marquee track (landing page logo/source ticker) */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* Slow drift for background aurora blobs */
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(4%, -3%, 0) scale(1.08);
+  }
+  66% {
+    transform: translate3d(-3%, 2%, 0) scale(0.96);
+  }
+}
+
+/* Conic sheen sweep for the primary CTA */
+@keyframes cta-sheen {
+  from {
+    transform: translateX(-120%) skewX(-18deg);
+  }
+  to {
+    transform: translateX(220%) skewX(-18deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track,
+  .aurora-blob,
+  .cta-sheen {
+    animation: none !important;
+  }
+}
+
 /* Skeleton shimmer for async views */
 @keyframes shimmer {
   from {
@@ -98,4 +140,27 @@ body {
   );
   background-size: 200% 100%;
   animation: shimmer 1.6s linear infinite;
+}
+
+/* Live-monitor pulse: a soft expanding halo behind the status dot */
+@keyframes monitor-ping {
+  0% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  75%,
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+
+.monitor-live-dot::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: currentColor;
+  color: #2f6b45;
+  animation: monitor-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
 }

@@ -247,6 +247,8 @@ export const EXTRACTION_SYSTEM_PROMPT = [
   "4. Composite ids: round_id = \"{company}|{round_type}|{announced_date}\"; snapshot_id = \"{domain}|{timestamp}\"; claim_id = \"{company}|{moat_type}\"; signal_id = \"{company}|{metric}|{observed_at}\"; event_id = \"{company}|{title}\".",
   "5. For RELEVANT_TO, 'to' is the literal idea text from the input; props.relevance_score 0-1.",
   "6. Only extract entities actually present in the documents. Do not add companies from your own knowledge.",
+  "7. RELEVANCE GATE — this is a COMPETITIVE landscape for the given idea. For each company, judge whether it is a plausible competitor, substitute, adjacent player, or incumbent in the SAME market as the idea. If it is unrelated (a random YC company, a dev tool, an off-topic product that merely shares a keyword), DROP it entirely — omit the company and every entity/relationship that only exists because of it. A small, tightly relevant graph is far better than a large noisy one. Only emit a company when you would also emit a RELEVANT_TO edge with relevance_score >= 0.4.",
+  "8. Give every company a RELEVANT_TO edge to the idea with an honest props.relevance_score; higher means a more direct competitor.",
 ].join("\n");
 
 /* ------------------------------------------------------------------ */

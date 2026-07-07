@@ -281,6 +281,10 @@ export async function* runDemoPipeline(
 /* ------------------------------------------------------------------ */
 
 const EXTRACTION_BATCH_SIZE = 5;
+/** Cap docs sent to extraction so the graph assembles responsively for
+ *  any idea (each batch is one sequential LLM call). Discovery may return
+ *  many more; the highest-signal ones are kept. */
+const MAX_EXTRACTION_DOCS = 18;
 
 /**
  * Run the full pipeline for a session, yielding PipelineEvents for the
@@ -329,14 +333,45 @@ export async function* runPipeline(
     debug("fetchAllSources failed:", err);
   }
   if (docs.length === 0) {
-    // Demo insurance: never leave the stage empty.
+    // No discoverable competitors for this idea (very niche, or a transient
+    // source outage). Emit the idea node alone and finish honestly — NEVER
+    // fall back to the internship demo fixture on a live, custom idea, or
+    // the graph would show companies unrelated to what the user typed.
+    yield {
+      type: "entity",
+      nodes: [
+        {
+          id: nodeId("Idea", sessionId),
+          label: "Idea",
+          name: idea,
+          text: idea,
+          session_id: sessionId,
+          created_at: new Date().toISOString(),
+          refined_tags: tags,
+        },
+      ],
+      links: [],
+    };
     yield {
       type: "status",
       stage: "discover",
-      message: "No live documents found; falling back to the demo landscape",
+      message:
+        "No competitors surfaced for this idea yet — try broader or more specific search terms.",
     };
-    yield* runDemoPipeline(sessionId);
+    yield { type: "done" };
     return;
+  }
+  // Keep the graph responsive for any idea: extraction is one sequential
+  // LLM call per batch, so cap the doc set. Web search ("name the startups
+  // competing in this space") and YC/news are the highest-signal sources
+  // for real competitors; HN/PH keyword matches are the noisiest, so they
+  // are trimmed first.
+  if (docs.length > MAX_EXTRACTION_DOCS) {
+    const rank = (t: string) =>
+      t === "websearch" ? 0 : t === "YC" || t === "news" ? 1 : 2;
+    docs = [...docs]
+      .sort((a, b) => rank(a.source_type) - rank(b.source_type))
+      .slice(0, MAX_EXTRACTION_DOCS);
   }
 
   /* -------- extract / dedupe / write (streaming batches) -------- */

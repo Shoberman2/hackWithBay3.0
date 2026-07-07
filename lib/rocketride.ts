@@ -26,6 +26,43 @@ function debug(...args: unknown[]): void {
   if (env.DEBUG) console.error("[rocketride]", ...args);
 }
 
+/**
+ * The RocketRide transport (ws) can emit an asynchronous 'error' event that
+ * escapes the awaited connect() promise; when the cloud endpoint is
+ * unreachable that stray rejection would otherwise 500 the in-flight
+ * request. Install one process-level guard that swallows ONLY RocketRide
+ * WebSocket transport errors (everything else still surfaces normally).
+ */
+let rocketrideGuardInstalled = false;
+function installTransportGuard(): void {
+  if (rocketrideGuardInstalled) return;
+  rocketrideGuardInstalled = true;
+  const isTransportError = (reason: unknown): boolean => {
+    const msg =
+      reason instanceof Error ? reason.message : String(reason ?? "");
+    return /rocketride|task\/service|Unexpected server response|WebSocket|wss?:\/\//i.test(
+      msg,
+    );
+  };
+  process.on("unhandledRejection", (reason) => {
+    if (isTransportError(reason)) {
+      debug("swallowed stray transport rejection:", reason);
+      return;
+    }
+    throw reason;
+  });
+}
+
+/** Race a promise against a timeout so a hung connect never blocks. */
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`rocketride: ${label} timed out`)), ms),
+    ),
+  ]);
+}
+
 export interface ExtractionInput {
   idea: string;
   tags: string[];
@@ -82,21 +119,35 @@ function stripFences(text: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
-async function runRemoteExtraction(
-  input: ExtractionInput,
-): Promise<ExtractedBatch> {
+/**
+ * Generic RocketRide pipe invocation: connect -> use(filepath) ->
+ * send(JSON payload) -> coerce the response to JSON -> terminate ->
+ * disconnect. Shared by the extraction pipe and the news-monitor pipe.
+ */
+export async function invokePipe(
+  filepath: string,
+  name: string,
+  payload: unknown,
+): Promise<unknown> {
+  installTransportGuard();
   const client = new RocketRideClient({
     auth: env.ROCKETRIDE_APIKEY,
     uri: env.ROCKETRIDE_URI,
+    // No reconnect storms; fail fast when the cloud endpoint is unreachable.
+    persist: false,
+    maxRetryTime: 4000,
+    requestTimeout: 20000,
+    onDisconnected: async () => {},
+    onConnectError: async () => {},
   });
-  await client.connect();
+  await withTimeout(client.connect(), 8000, "connect");
   let token: string | undefined;
   try {
     const useResult = await client.use({
-      filepath: PIPE_PATH,
-      name: "rivalry-extract",
-      // The .pipe references ${ROCKETRIDE_BUTTERBASE_AI_KEY} so the LLM
-      // node talks to the Butterbase gateway (never raw provider keys).
+      filepath,
+      name,
+      // The .pipe files reference ${ROCKETRIDE_BUTTERBASE_AI_KEY} so LLM
+      // nodes talk to the Butterbase gateway (never raw provider keys).
       env: env.BUTTERBASE_AI_KEY
         ? { ROCKETRIDE_BUTTERBASE_AI_KEY: env.BUTTERBASE_AI_KEY }
         : undefined,
@@ -104,11 +155,11 @@ async function runRemoteExtraction(
     token = useResult.token;
     const result = await client.send(
       token,
-      JSON.stringify(input),
+      JSON.stringify(payload),
       { name: "input.json" },
       "application/json",
     );
-    return parseExtractedBatch(coerceResultToJson(result));
+    return coerceResultToJson(result);
   } finally {
     if (token) {
       try {
@@ -123,6 +174,14 @@ async function runRemoteExtraction(
       debug("disconnect failed", err);
     }
   }
+}
+
+async function runRemoteExtraction(
+  input: ExtractionInput,
+): Promise<ExtractedBatch> {
+  return parseExtractedBatch(
+    await invokePipe(PIPE_PATH, "rivalry-extract", input),
+  );
 }
 
 /* ------------------------------------------------------------------ */

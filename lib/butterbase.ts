@@ -86,7 +86,10 @@ function debugLog(...args: unknown[]): void {
 }
 
 function butterbaseInDemoMode(): boolean {
-  return env.DEMO_MODE || !hasButterbase();
+  // PUBLIC_DEMO relaxes auth + payments for an open demo (guest user, fake
+  // checkout) without touching the live LLM/compute integrations, which
+  // gate on env.DEMO_MODE instead.
+  return env.DEMO_MODE || env.PUBLIC_DEMO || !hasButterbase();
 }
 
 /**
