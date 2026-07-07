@@ -89,6 +89,21 @@ function butterbaseInDemoMode(): boolean {
   return env.DEMO_MODE || !hasButterbase();
 }
 
+/**
+ * Run a live Butterbase Data API call; if it throws (e.g. the app has not
+ * provisioned this table yet — an admin-only dashboard step), fall back to
+ * the in-memory store so the flow never 500s. Auth, billing, and the AI
+ * gateway stay fully live; only unprovisioned tables degrade.
+ */
+async function liveOrDemo<T>(live: () => Promise<T>, demo: () => T): Promise<T> {
+  try {
+    return await live();
+  } catch (err) {
+    debugLog("live Data API call fell back to in-memory store:", (err as Error).message);
+    return demo();
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Demo-mode in-memory store                                           */
 /* ------------------------------------------------------------------ */
@@ -280,7 +295,7 @@ export async function upsertSession(
   status = "active",
   userId?: string,
 ): Promise<void> {
-  if (butterbaseInDemoMode()) {
+  const demoUpsert = () => {
     demoStore().sessions.set(sessionId, {
       session_id: sessionId,
       user_id: userId,
@@ -289,44 +304,50 @@ export async function upsertSession(
       status,
       created_at: new Date().toISOString(),
     });
+  };
+  if (butterbaseInDemoMode()) {
+    demoUpsert();
     return;
   }
-  const client = getButterbase();
-  const existing = await client
-    .from<SessionRow>("sessions")
-    .select("session_id")
-    .eq("session_id", sessionId);
-  if (existing.error) throw existing.error;
-  if (existing.data && existing.data.length > 0) {
-    const { error } = await client
+  await liveOrDemo(async () => {
+    const client = getButterbase();
+    const existing = await client
       .from<SessionRow>("sessions")
-      .update({ idea, tags, status })
+      .select("session_id")
       .eq("session_id", sessionId);
-    if (error) throw error;
-  } else {
-    const { error } = await client.from<SessionRow>("sessions").insert({
-      session_id: sessionId,
-      user_id: userId,
-      idea,
-      tags,
-      status,
-      created_at: new Date().toISOString(),
-    });
-    if (error) throw error;
-  }
+    if (existing.error) throw existing.error;
+    if (existing.data && existing.data.length > 0) {
+      const { error } = await client
+        .from<SessionRow>("sessions")
+        .update({ idea, tags, status })
+        .eq("session_id", sessionId);
+      if (error) throw error;
+    } else {
+      const { error } = await client.from<SessionRow>("sessions").insert({
+        session_id: sessionId,
+        user_id: userId,
+        idea,
+        tags,
+        status,
+        created_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+    }
+  }, demoUpsert);
 }
 
 export async function getSession(sessionId: string): Promise<SessionRow | null> {
-  if (butterbaseInDemoMode()) {
-    return demoStore().sessions.get(sessionId) ?? null;
-  }
-  const { data, error } = await getButterbase()
-    .from<SessionRow>("sessions")
-    .select("*")
-    .eq("session_id", sessionId)
-    .limit(1);
-  if (error) throw error;
-  return data?.[0] ?? null;
+  const demoGet = () => demoStore().sessions.get(sessionId) ?? null;
+  if (butterbaseInDemoMode()) return demoGet();
+  return liveOrDemo(async () => {
+    const { data, error } = await getButterbase()
+      .from<SessionRow>("sessions")
+      .select("*")
+      .eq("session_id", sessionId)
+      .limit(1);
+    if (error) throw error;
+    return data?.[0] ?? null;
+  }, demoGet);
 }
 
 /* ------------------------------------------------------------------ */
@@ -335,15 +356,17 @@ export async function getSession(sessionId: string): Promise<SessionRow | null> 
 
 /** Count of agent questions asked in a session (free tier meters at 5). */
 export async function getQuestionCount(sessionId: string): Promise<number> {
-  if (butterbaseInDemoMode()) {
-    return demoStore().questions.filter((q) => q.session_id === sessionId).length;
-  }
-  const { data, error } = await getButterbase()
-    .from<QuestionRow>("questions")
-    .select("session_id")
-    .eq("session_id", sessionId);
-  if (error) throw error;
-  return data?.length ?? 0;
+  const demoCount = () =>
+    demoStore().questions.filter((q) => q.session_id === sessionId).length;
+  if (butterbaseInDemoMode()) return demoCount();
+  return liveOrDemo(async () => {
+    const { data, error } = await getButterbase()
+      .from<QuestionRow>("questions")
+      .select("session_id")
+      .eq("session_id", sessionId);
+    if (error) throw error;
+    return data?.length ?? 0;
+  }, demoCount);
 }
 
 export async function recordQuestion(
@@ -359,12 +382,17 @@ export async function recordQuestion(
     answer,
     created_at: new Date().toISOString(),
   };
-  if (butterbaseInDemoMode()) {
+  const demoPush = () => {
     demoStore().questions.push(row);
+  };
+  if (butterbaseInDemoMode()) {
+    demoPush();
     return;
   }
-  const { error } = await getButterbase().from<QuestionRow>("questions").insert(row);
-  if (error) throw error;
+  await liveOrDemo(async () => {
+    const { error } = await getButterbase().from<QuestionRow>("questions").insert(row);
+    if (error) throw error;
+  }, demoPush);
 }
 
 /* ------------------------------------------------------------------ */
@@ -404,7 +432,7 @@ export async function createPurchase(
   origin?: string,
   accessToken?: string,
 ): Promise<PurchaseSession> {
-  if (butterbaseInDemoMode()) {
+  const demoCreate = (): PurchaseSession => {
     const orderId = `demo-order-${Math.random().toString(36).slice(2, 10)}`;
     demoStore().orders.set(orderId, {
       orderId,
@@ -414,30 +442,37 @@ export async function createPurchase(
     });
     debugLog("demo order created", orderId);
     return { orderId, checkoutUrl: "", demo: true };
-  }
-
-  const client = getButterbase(accessToken);
-  const productId = await ensureProduct(client);
-  const returnUrl = origin
-    ? `${origin}/session/${encodeURIComponent(sessionId)}?checkout=return`
-    : undefined;
-  const { data, error } = await client.billing.purchase({
-    productId,
-    successUrl: returnUrl,
-    cancelUrl: returnUrl,
-  });
-  if (error || !data) {
-    throw error ?? new Error("Purchase returned no data");
-  }
-  const row: PurchaseRow = {
-    session_id: sessionId,
-    order_id: data.orderId,
-    status: "pending",
-    created_at: new Date().toISOString(),
   };
-  const inserted = await client.from<PurchaseRow>("purchases").insert(row);
-  if (inserted.error) throw inserted.error;
-  return { orderId: data.orderId, checkoutUrl: data.url, demo: false };
+  if (butterbaseInDemoMode()) return demoCreate();
+
+  return liveOrDemo(async () => {
+    const client = getButterbase(accessToken);
+    const productId = await ensureProduct(client);
+    const returnUrl = origin
+      ? `${origin}/session/${encodeURIComponent(sessionId)}?checkout=return`
+      : undefined;
+    const { data, error } = await client.billing.purchase({
+      productId,
+      successUrl: returnUrl,
+      cancelUrl: returnUrl,
+    });
+    if (error || !data) {
+      throw error ?? new Error("Purchase returned no data");
+    }
+    // Best-effort receipt row; a missing `purchases` table must not discard
+    // a real Stripe checkout URL.
+    try {
+      await client.from<PurchaseRow>("purchases").insert({
+        session_id: sessionId,
+        order_id: data.orderId,
+        status: "pending",
+        created_at: new Date().toISOString(),
+      });
+    } catch (err) {
+      debugLog("purchases insert skipped:", (err as Error).message);
+    }
+    return { orderId: data.orderId, checkoutUrl: data.url, demo: false };
+  }, demoCreate);
 }
 
 function normalizeOrderStatus(status: string): OrderStatus {
@@ -447,17 +482,21 @@ function normalizeOrderStatus(status: string): OrderStatus {
 
 /** Poll an order until it settles (used by the checkout status route). */
 export async function getOrderStatus(orderId: string): Promise<OrderStatus> {
-  if (butterbaseInDemoMode()) {
+  const demoStatus = (): OrderStatus => {
     const order = demoStore().orders.get(orderId);
     if (!order) return "failed";
     if (order.status === "pending" && Date.now() - order.createdAt >= DEMO_SETTLE_MS) {
       order.status = "paid";
     }
     return order.status;
-  }
-  const { data, error } = await getButterbase().billing.getOrder(orderId);
-  if (error || !data) throw error ?? new Error("Order lookup returned no data");
-  return normalizeOrderStatus((data as Order).status);
+  };
+  // Demo-created orders (billing fell back) live in the in-memory store.
+  if (butterbaseInDemoMode() || orderId.startsWith("demo-order-")) return demoStatus();
+  return liveOrDemo(async () => {
+    const { data, error } = await getButterbase().billing.getOrder(orderId);
+    if (error || !data) throw error ?? new Error("Order lookup returned no data");
+    return normalizeOrderStatus((data as Order).status);
+  }, demoStatus);
 }
 
 /** Mark a session's purchase paid (called when the order settles). */
@@ -465,36 +504,44 @@ export async function markPurchasePaid(
   sessionId: string,
   orderId: string,
 ): Promise<void> {
-  if (butterbaseInDemoMode()) {
+  const demoMark = () => {
     demoStore().purchases.set(sessionId, {
       session_id: sessionId,
       order_id: orderId,
       status: "paid",
       created_at: new Date().toISOString(),
     });
+  };
+  if (butterbaseInDemoMode() || orderId.startsWith("demo-order-")) {
+    demoMark();
     return;
   }
-  const { error } = await getButterbase()
-    .from<PurchaseRow>("purchases")
-    .update({ status: "paid" })
-    .eq("session_id", sessionId)
-    .eq("order_id", orderId);
-  if (error) throw error;
+  await liveOrDemo(async () => {
+    const { error } = await getButterbase()
+      .from<PurchaseRow>("purchases")
+      .update({ status: "paid" })
+      .eq("session_id", sessionId)
+      .eq("order_id", orderId);
+    if (error) throw error;
+  }, demoMark);
 }
 
 /** Paywall check: does this session have a settled purchase? */
 export async function hasPurchase(sessionId: string): Promise<boolean> {
-  if (butterbaseInDemoMode()) {
-    return demoStore().purchases.get(sessionId)?.status === "paid";
-  }
-  const { data, error } = await getButterbase()
-    .from<PurchaseRow>("purchases")
-    .select("order_id")
-    .eq("session_id", sessionId)
-    .eq("status", "paid")
-    .limit(1);
-  if (error) throw error;
-  return Boolean(data && data.length > 0);
+  const demoHas = () => demoStore().purchases.get(sessionId)?.status === "paid";
+  if (butterbaseInDemoMode()) return demoHas();
+  return liveOrDemo(async () => {
+    const { data, error } = await getButterbase()
+      .from<PurchaseRow>("purchases")
+      .select("order_id")
+      .eq("session_id", sessionId)
+      .eq("status", "paid")
+      .limit(1);
+    if (error) throw error;
+    // A live table with no row still means "not purchased"; but if the
+    // paid state was tracked in-memory (demo fallback settle), honor it.
+    return Boolean(data && data.length > 0) || demoHas();
+  }, demoHas);
 }
 
 /* ------------------------------------------------------------------ */
@@ -502,32 +549,38 @@ export async function hasPurchase(sessionId: string): Promise<boolean> {
 /* ------------------------------------------------------------------ */
 
 export async function saveReport(sessionId: string, markdown: string): Promise<void> {
-  if (butterbaseInDemoMode()) {
+  const demoSave = () => {
     demoStore().reports.set(sessionId, {
       session_id: sessionId,
       markdown,
       created_at: new Date().toISOString(),
     });
+  };
+  if (butterbaseInDemoMode()) {
+    demoSave();
     return;
   }
-  const { error } = await getButterbase().from<ReportRow>("reports").insert({
-    session_id: sessionId,
-    markdown,
-    created_at: new Date().toISOString(),
-  });
-  if (error) throw error;
+  await liveOrDemo(async () => {
+    const { error } = await getButterbase().from<ReportRow>("reports").insert({
+      session_id: sessionId,
+      markdown,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  }, demoSave);
 }
 
 export async function getReport(sessionId: string): Promise<string | null> {
-  if (butterbaseInDemoMode()) {
-    return demoStore().reports.get(sessionId)?.markdown ?? null;
-  }
-  const { data, error } = await getButterbase()
-    .from<ReportRow>("reports")
-    .select("*")
-    .eq("session_id", sessionId)
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  return data?.[0]?.markdown ?? null;
+  const demoGet = () => demoStore().reports.get(sessionId)?.markdown ?? null;
+  if (butterbaseInDemoMode()) return demoGet();
+  return liveOrDemo(async () => {
+    const { data, error } = await getButterbase()
+      .from<ReportRow>("reports")
+      .select("*")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error) throw error;
+    return data?.[0]?.markdown ?? demoGet();
+  }, demoGet);
 }

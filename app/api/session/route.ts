@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { upsertSession } from "@/lib/butterbase";
+import { currentUser } from "@/lib/auth-server";
 import { writeIdea } from "@/lib/pipeline/write";
 import { env } from "@/lib/env";
 
@@ -30,6 +31,11 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request): Promise<NextResponse> {
+  const user = await currentUser();
+  if (!user) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
+
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await request.json());
@@ -44,7 +50,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   const tags = body.result?.tags ?? [];
 
   try {
-    await upsertSession(id, body.idea, tags);
+    await upsertSession(id, body.idea, tags, "active", user.id);
   } catch (err) {
     if (env.DEBUG) console.error("[api/session] upsertSession", err);
   }

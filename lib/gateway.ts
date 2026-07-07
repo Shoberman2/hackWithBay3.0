@@ -57,7 +57,7 @@ export class GatewayError extends Error {
   }
 }
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4-5";
+const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
 
 function debugLog(...args: unknown[]): void {
@@ -150,7 +150,15 @@ export async function chat(
     debugLog("demo completion, purpose:", options.purpose ?? "(sniffed)");
     return cannedCompletion(messages, options);
   }
-  return requestCompletion(messages, options);
+  // Live gateway with a safety net: if the real Butterbase call fails
+  // (e.g. no credits yet, provider hiccup), fall back to the canned
+  // completion so onboarding, Q&A, and the report never dead-end.
+  try {
+    return await requestCompletion(messages, options);
+  } catch (error) {
+    debugLog("gateway call failed, using canned fallback:", (error as Error).message);
+    return cannedCompletion(messages, options);
+  }
 }
 
 const JSON_INSTRUCTION =

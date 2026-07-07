@@ -9,6 +9,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { env, isDemoMode } from "@/lib/env";
+import { currentUser } from "@/lib/auth-server";
 import { fetchNeighborhood } from "@/lib/neo4j";
 import { loadDemoGraph } from "@/lib/pipeline/conductor";
 import type { GraphLink, GraphNode } from "@/lib/types";
@@ -36,6 +37,10 @@ export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ nodeId: string }> },
 ): Promise<NextResponse> {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
+
   const { nodeId: rawNodeId } = await ctx.params;
   const nodeId = decodeURIComponent(rawNodeId);
 

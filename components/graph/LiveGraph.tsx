@@ -306,16 +306,12 @@ export default function LiveGraph({
 
   const handleNodeClick = useCallback(
     (node: FGNode) => {
-      const id = String(node.id ?? "");
-      const now = Date.now();
-      const isDouble =
-        lastClickRef.current.id === id && now - lastClickRef.current.time < 350;
-      lastClickRef.current = { id, time: now };
-      if (isDouble) {
-        onExpand(node as GraphNode);
-      } else {
-        onSelect(node as GraphNode);
-      }
+      // A single tap both selects the node (opens the detail panel) and
+      // reveals its 1-hop neighborhood -- progressive disclosure, so the
+      // graph grows outward from what the user actually explores.
+      lastClickRef.current = { id: String(node.id ?? ""), time: Date.now() };
+      onSelect(node as GraphNode);
+      onExpand(node as GraphNode);
     },
     [onExpand, onSelect],
   );

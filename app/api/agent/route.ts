@@ -14,6 +14,7 @@ import { z } from "zod";
 import { runOnboarding, answerQuestion } from "@/lib/agents";
 import type { ChatMessage } from "@/lib/gateway";
 import { getQuestionCount, recordQuestion, hasPurchase } from "@/lib/butterbase";
+import { currentUser } from "@/lib/auth-server";
 import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
@@ -75,6 +76,9 @@ async function meterQuestion(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await request.json());

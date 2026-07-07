@@ -3,14 +3,18 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import Interview from "@/components/onboarding/Interview";
+import AuthGate from "@/components/onboarding/AuthGate";
+import { useAuth } from "@/components/account/AuthProvider";
 
 const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 
 /**
- * The single centered column on the landing page. Holds the idea input,
- * then swaps to the interview in place (no route change).
+ * The single centered column on the landing page. Sign-in is required
+ * before anything else; once authenticated it holds the idea input, then
+ * swaps to the interview in place (no route change).
  */
 export default function OnboardingFlow() {
+  const { user, loading, refresh } = useAuth();
   const [idea, setIdea] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
@@ -18,6 +22,33 @@ export default function OnboardingFlow() {
 
   function submit() {
     if (canSubmit) setSubmitted(true);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center px-6">
+        <div className="shimmer h-9 w-44 rounded-[6px]" aria-hidden />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center px-6">
+        <div className="mb-8 max-w-sm text-center">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Map the landscape around your idea.
+          </h1>
+          <p className="mt-2 text-sm text-ink-2">
+            Sign in to build and save your competitive graph.
+          </p>
+        </div>
+        <AuthGate
+          reason="Rivalry keeps your scans private to your account."
+          onAuthenticated={() => void refresh()}
+        />
+      </div>
+    );
   }
 
   return (

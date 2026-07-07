@@ -13,6 +13,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
 import { hasPurchase, getReport, saveReport } from "@/lib/butterbase";
+import { currentUser } from "@/lib/auth-server";
 import { chat } from "@/lib/gateway";
 import { runRead } from "@/lib/neo4j";
 import { env, isDemoMode } from "@/lib/env";
@@ -256,6 +257,9 @@ async function generateReport(sessionId: string): Promise<string> {
 /* ------------------------------------------------------------------ */
 
 export async function POST(req: NextRequest): Promise<NextResponse> {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
   let sessionId: string;
   try {
     const body = (await req.json()) as { sessionId?: string };
@@ -290,6 +294,9 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 }
 
 export async function GET(req: NextRequest): Promise<NextResponse> {
+  if (!(await currentUser())) {
+    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  }
   const sessionId = req.nextUrl.searchParams.get("sessionId")?.trim();
   if (!sessionId) {
     return NextResponse.json({ error: "sessionId is required." }, { status: 400 });

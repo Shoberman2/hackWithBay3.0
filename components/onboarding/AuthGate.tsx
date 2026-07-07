@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { signIn, signUp, type ButterbaseUser } from "@/lib/butterbase";
-import { env } from "@/lib/env";
+import type { AuthUser } from "@/components/account/AuthProvider";
 
 const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 
@@ -22,14 +21,15 @@ function passwordMeetsPolicy(password: string): boolean {
 interface AuthGateProps {
   /** Why auth is needed right now, e.g. "Sign in to save this session." */
   reason?: string;
-  onAuthenticated: (user: ButterbaseUser) => void;
+  onAuthenticated: (user: AuthUser) => void;
   onDismiss?: () => void;
 }
 
 /**
- * Inline auth panel (no modal). Render it in place of the action that
- * required an account. In demo mode (no Butterbase credentials) it
- * completes with a mock user so the flow never dead-ends.
+ * Inline auth panel (no modal). Posts to /api/auth/{signin,signup}, which
+ * set the httpOnly session cookie server-side (the browser never touches
+ * the Butterbase SDK). In demo mode the route resolves a mock user so the
+ * flow never dead-ends.
  */
 export default function AuthGate({
   reason,
@@ -62,18 +62,19 @@ export default function AuthGate({
 
     setPending(true);
     try {
-      const call = mode === "signup" ? signUp : signIn;
-      const { user, error: authError } = await call(email.trim(), password);
-      if (authError || !user) {
-        setError(authError ?? "Could not sign you in. Try again.");
+      const res = await fetch(`/api/auth/${mode === "signup" ? "signup" : "signin"}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+      });
+      const body = (await res.json()) as { user?: AuthUser; error?: string };
+      if (!res.ok || !body.user) {
+        setError(body.error ?? "Could not sign you in. Try again.");
         return;
       }
-      onAuthenticated(user);
-    } catch (err) {
-      if (env.DEBUG) console.error("auth call failed", err);
-      // Demo insurance: without Butterbase credentials the stubs throw;
-      // complete the gate with a mock user so the flow keeps moving.
-      onAuthenticated({ id: "demo-user", email: email.trim() });
+      onAuthenticated(body.user);
+    } catch {
+      setError("Could not reach the server. Check your connection and retry.");
     } finally {
       setPending(false);
     }

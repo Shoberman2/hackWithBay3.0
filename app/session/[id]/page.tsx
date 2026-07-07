@@ -7,16 +7,14 @@
  * fixture replay inside useGraphStream.
  */
 
-import { use, useCallback, useState } from "react";
+import { use, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import type { GraphLink, GraphNode } from "@/lib/types";
-import {
-  expandFromFixture,
-  useGraphStream,
-  type Highlight,
-} from "@/hooks/useGraphStream";
+import type { GraphNode } from "@/lib/types";
+import type { Highlight } from "@/hooks/useGraphStream";
+import { useProgressiveGraph } from "@/hooks/useProgressiveGraph";
 import LiveGraph from "@/components/graph/LiveGraph";
+import SummaryTable from "@/components/graph/SummaryTable";
 import NodeDetailPanel from "@/components/graph/NodeDetailPanel";
 import InsightCards from "@/components/graph/InsightCards";
 import GraphLegend from "@/components/graph/GraphLegend";
@@ -24,6 +22,8 @@ import StreamStatus from "@/components/graph/StreamStatus";
 import PaywallCard from "@/components/report/PaywallCard";
 import ReportView from "@/components/report/ReportView";
 import UserMenu from "@/components/account/UserMenu";
+import AuthGate from "@/components/onboarding/AuthGate";
+import { useAuth } from "@/components/account/AuthProvider";
 import type { AgentChatProps } from "@/components/chat/AgentChat";
 
 /*
@@ -42,30 +42,28 @@ const AgentChat = dynamic<AgentChatProps>(
   },
 );
 
-interface ExpandPayload {
-  nodes?: GraphNode[];
-  links?: GraphLink[];
-}
-
 export default function SessionPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
+  const { user, loading: authLoading, refresh: refreshAuth } = useAuth();
   const {
     data,
     status,
-    stage,
     insights,
-    addEntities,
+    expand,
     highlight,
     setHighlight,
-  } = useGraphStream(id);
+    revealedCount,
+    totalCount,
+  } = useProgressiveGraph(id);
 
+  const [view, setView] = useState<"graph" | "table">("graph");
   const [selected, setSelected] = useState<GraphNode | null>(null);
-  const [expanding, setExpanding] = useState(false);
   const [expandError, setExpandError] = useState<string | null>(null);
+  const [focusId, setFocusId] = useState<string | null>(null);
 
   // Paid report flow: paywall -> checkout -> generated markdown.
   const [reportOpen, setReportOpen] = useState(false);
@@ -119,48 +117,92 @@ export default function SessionPage({
   }, []);
 
   const handleExpand = useCallback(
-    async (node: GraphNode) => {
+    (node: GraphNode) => {
       setSelected(node);
-      setExpanding(true);
       setExpandError(null);
-      let added = false;
-      try {
-        const res = await fetch(`/api/expand/${encodeURIComponent(node.id)}`);
-        if (!res.ok) throw new Error(`expand failed: ${res.status}`);
-        const payload = (await res.json()) as ExpandPayload;
-        const counts = addEntities(payload.nodes ?? [], payload.links ?? []);
-        added = counts.nodes > 0 || counts.links > 0;
-      } catch {
-        // Demo insurance: pull the node's 1-hop neighborhood from the
-        // bundled fixture instead of failing the interaction.
-        added = expandFromFixture(node.id, addEntities);
-      } finally {
-        setExpanding(false);
-      }
-      if (!added) {
-        setExpandError("No new connections found for this node.");
+      const added = expand(node);
+      if (added.nodes === 0 && added.links === 0) {
+        setExpandError("Every connection for this node is already on the graph.");
       }
     },
-    [addEntities],
+    [expand],
   );
+
+  // Selecting a company in the table reveals + focuses it on the graph.
+  const handleSelectCompany = useCallback(
+    (nodeId: string) => {
+      setView("graph");
+      expand({ id: nodeId } as GraphNode);
+      setFocusId(nodeId);
+    },
+    [expand],
+  );
+
+  useEffect(() => {
+    if (!focusId) return;
+    const node = data.nodes.find((n) => n.id === focusId);
+    if (node) {
+      setSelected(node);
+      setExpandError(null);
+      setFocusId(null);
+    }
+  }, [focusId, data.nodes]);
 
   const handleHighlight = useCallback(
     (next: Highlight | null) => setHighlight(next),
     [setHighlight],
   );
 
+  if (authLoading) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-canvas">
+        <div className="shimmer h-9 w-44 rounded-[6px]" aria-hidden />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center bg-canvas px-6">
+        <div className="mb-8 max-w-sm text-center">
+          <p className="text-sm font-semibold tracking-tight text-ink">Rivalry</p>
+          <h1 className="mt-2 text-xl font-semibold tracking-tight">
+            Sign in to open this landscape
+          </h1>
+          <p className="mt-2 text-sm text-ink-2">
+            Sessions are private to your account.
+          </p>
+        </div>
+        <AuthGate
+          reason="Sign in to view and explore this competitive graph."
+          onAuthenticated={() => void refreshAuth()}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-[100dvh] flex-col bg-canvas text-ink lg:flex-row">
-      {/* Graph canvas */}
+      {/* Graph / table canvas */}
       <div className="relative h-[60dvh] min-w-0 flex-1 lg:h-auto lg:min-h-[100dvh]">
-        <LiveGraph
-          data={data}
-          status={status}
-          highlight={highlight}
-          selectedId={selected?.id ?? null}
-          onSelect={handleSelect}
-          onExpand={handleExpand}
-        />
+        {view === "graph" ? (
+          <LiveGraph
+            data={data}
+            status={status}
+            highlight={highlight}
+            selectedId={selected?.id ?? null}
+            onSelect={handleSelect}
+            onExpand={handleExpand}
+          />
+        ) : (
+          <div className="h-full pt-16">
+            <SummaryTable
+              sessionId={id}
+              selectedId={selected?.id ?? null}
+              onSelectCompany={handleSelectCompany}
+            />
+          </div>
+        )}
 
         <header className="pointer-events-none absolute left-5 top-5">
           <Link
@@ -174,9 +216,37 @@ export default function SessionPage({
           </p>
         </header>
 
-        <div className="absolute bottom-5 left-5">
-          <GraphLegend nodes={data.nodes} />
+        {/* Graph / Table view toggle */}
+        <div className="absolute left-1/2 top-5 -translate-x-1/2">
+          <div className="flex rounded-full border border-line bg-canvas p-0.5 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+            {(["graph", "table"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`rounded-full px-3.5 py-1 text-xs font-medium capitalize transition-colors ${
+                  view === v ? "bg-ink text-white" : "text-ink-2 hover:text-ink"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
         </div>
+
+        {view === "graph" && status === "done" && (
+          <div className="pointer-events-none absolute bottom-5 left-1/2 -translate-x-1/2">
+            <span className="rounded-full border border-line bg-canvas/90 px-3 py-1 font-mono text-[11px] text-ink-2 shadow-[0_1px_4px_rgba(0,0,0,0.04)]">
+              Tap a node to reveal its connections · {revealedCount}/{totalCount} shown
+            </span>
+          </div>
+        )}
+
+        {view === "graph" && (
+          <div className="absolute bottom-5 left-5">
+            <GraphLegend nodes={data.nodes} />
+          </div>
+        )}
 
         <div className="absolute right-5 top-5">
           <UserMenu />
@@ -188,7 +258,7 @@ export default function SessionPage({
         <div className="border-b border-line px-5 py-4">
           <StreamStatus
             status={status}
-            stage={stage}
+            stage={null}
             nodeCount={data.nodes.length}
             linkCount={data.links.length}
           />
@@ -199,7 +269,7 @@ export default function SessionPage({
             <NodeDetailPanel
               node={selected}
               data={data}
-              expanding={expanding}
+              expanding={false}
               expandError={expandError}
               onExpand={handleExpand}
               onClose={() => handleSelect(null)}
