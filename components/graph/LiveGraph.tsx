@@ -57,7 +57,7 @@ import type {
   GraphStreamStatus,
   Highlight,
 } from "@/hooks/useGraphStream";
-import { endpointId, linkKeyOf, NODE_COLORS } from "./graph-utils";
+import { endpointId, linkKeyOf, NODE_COLORS, REL_LABEL } from "./graph-utils";
 
 type NvlWrapper = typeof import("@neo4j-nvl/react").InteractiveNvlWrapper;
 
@@ -552,7 +552,29 @@ export default function LiveGraph({
         color = EXPANDED_LINK_COLOR;
       }
 
-      return { id: key, from: s, to: t, type: link.type, color, width };
+      // Label the edge only when it is one of the freshly disclosed
+      // connections (touches an expanded company or a highlighted path) --
+      // that is exactly the moment the user needs to know what the link
+      // means. The idea->company base ring stays label-free.
+      const rel = REL_LABEL[link.type] ?? "";
+      const showCaption =
+        rel !== "" && (touchesExpanded || isHighlighted || touchesHover);
+
+      return {
+        id: key,
+        from: s,
+        to: t,
+        type: link.type,
+        color,
+        width,
+        ...(showCaption
+          ? {
+              caption: rel,
+              captionAlign: "center" as const,
+              captionSize: 2.4,
+            }
+          : {}),
+      };
     });
   }, [visible, highlightLinks, hoverId, expanded]);
 

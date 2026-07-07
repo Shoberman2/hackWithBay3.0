@@ -115,6 +115,33 @@ export function linkKeyOf(link: {
   return `${endpointId(link.source)}|${link.type}|${endpointId(link.target)}`;
 }
 
+/**
+ * Human-readable edge labels, phrased so `from → to` reads as a sentence:
+ * "Kleiner Perkins invested in Handshake", "Garrett Lord founded Handshake".
+ * Idea/segment plumbing edges map to "" so the base ring stays uncluttered.
+ */
+export const REL_LABEL: Record<string, string> = {
+  INVESTED_IN: "invested in",
+  PARTICIPATED_IN: "backed",
+  RAISED: "raised",
+  FOUNDED: "founded",
+  WORKED_AT: "worked at",
+  HAS_FEATURE: "ships",
+  SHIPPED: "launched",
+  SHIPPED_AFTER: "after",
+  HAS_TRACTION: "traction",
+  CLAIMS_MOAT: "moat",
+  POSTED: "posted",
+  ABOUT: "about",
+  COMPETES_IN: "",
+  TARGETS: "",
+  RELEVANT_TO: "",
+  CITED_BY: "",
+  HAD_SNAPSHOT: "",
+  NEXT_SNAPSHOT: "",
+  EVIDENCED_BY: "",
+};
+
 /** Compact USD formatting for funding amounts: 200000000 -> $200M. */
 export function formatUsd(amount?: number): string {
   if (typeof amount !== "number" || Number.isNaN(amount)) return "Undisclosed";
