@@ -77,9 +77,6 @@ async function meterQuestion(
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
-  if (!(await currentUser())) {
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
-  }
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await request.json());
@@ -119,8 +116,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       });
     }
 
-    // mode === "ask": free tier meters at FREE_QUESTION_LIMIT questions;
-    // a settled report purchase unlocks unlimited questions.
+    // mode === "ask": requires sign-in (onboarding above is public -- it
+    // runs before the user has an account). Free tier meters at
+    // FREE_QUESTION_LIMIT questions; a settled report purchase unlocks more.
+    if (!(await currentUser())) {
+      return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    }
     const used = await countQuestions(body.sessionId);
     if (used >= FREE_QUESTION_LIMIT) {
       let purchased = false;
