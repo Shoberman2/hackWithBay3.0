@@ -1,11 +1,14 @@
 # Neo4j Setup
 
-Startup Radar uses Neo4j for the ecosystem graph:
+Rivalry uses Neo4j for the competitive landscape graph:
 
+- `Idea`
 - `Company`
-- `Person`
+- `Founder` / `Person`
 - `Investor`
-- `Website`
+- `Feature`
+- `LaunchEvent`
+- `Source`
 - `Segment`
 - `Trend`
 - `Opportunity`

@@ -22,6 +22,15 @@ FOR (n:Trend) REQUIRE n.id IS UNIQUE;
 CREATE CONSTRAINT startup_radar_opportunity_id IF NOT EXISTS
 FOR (n:Opportunity) REQUIRE n.id IS UNIQUE;
 
+CREATE CONSTRAINT startup_radar_feature_id IF NOT EXISTS
+FOR (n:Feature) REQUIRE n.id IS UNIQUE;
+
+CREATE CONSTRAINT startup_radar_launch_event_id IF NOT EXISTS
+FOR (n:LaunchEvent) REQUIRE n.id IS UNIQUE;
+
+CREATE CONSTRAINT startup_radar_source_id IF NOT EXISTS
+FOR (n:Source) REQUIRE n.id IS UNIQUE;
+
 CREATE INDEX startup_radar_entity_name IF NOT EXISTS
 FOR (n:Entity) ON (n.name);
 

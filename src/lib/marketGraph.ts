@@ -61,7 +61,7 @@ export interface MarketGraph {
   generatedAt: string
 }
 
-const DEFAULT_PROMPT = 'AI tools for independent insurance brokers'
+const DEFAULT_PROMPT = 'internship platform'
 
 const STOP_WORDS = new Set([
   'a',
@@ -180,8 +180,8 @@ export const buildMarketGraph = (
       kind: 'idea',
       x: 50,
       y: 48,
-      summary: `Initial thesis around ${prompt}.`,
-      signal: 'Anchor query',
+      summary: `Day-zero founder thesis around ${prompt}.`,
+      signal: 'Idea anchor',
     },
     {
       id: 'segment',
@@ -189,8 +189,8 @@ export const buildMarketGraph = (
       kind: 'segment',
       x: 50,
       y: 16,
-      summary: `Primary buyer or market segment detected from the scan input.`,
-      signal: 'Customer gravity',
+      summary: `Primary buyer or market segment inferred from the founder brief.`,
+      signal: 'Segment focus',
     },
     {
       id: 'trend',
@@ -198,8 +198,8 @@ export const buildMarketGraph = (
       kind: 'trend',
       x: 22,
       y: 20,
-      summary: `A recurring positioning theme across products, hiring, and web copy.`,
-      signal: 'Rising narrative',
+      summary: `A recurring positioning theme across product pages, launches, and hiring signals.`,
+      signal: 'Category narrative',
     },
     {
       id: 'company-1',
@@ -207,8 +207,8 @@ export const buildMarketGraph = (
       kind: 'company',
       x: 23,
       y: 45,
-      summary: `Targets ${segment.toLowerCase()} with workflow automation and data capture.`,
-      signal: 'Product velocity',
+      summary: `Potential competitor targeting ${segment.toLowerCase()} with a focused workflow wedge.`,
+      signal: 'Direct player',
       url: `https://${slugify(companies[0])}.com`,
     },
     {
@@ -217,8 +217,8 @@ export const buildMarketGraph = (
       kind: 'company',
       x: 78,
       y: 39,
-      summary: `Positions around integrations, reporting, and faster operational handoffs.`,
-      signal: 'Hiring signal',
+      summary: `Adjacent player positioning around integrations, reporting, and operational handoffs.`,
+      signal: 'Fast follower',
       url: `https://${slugify(companies[1])}.com`,
     },
     {
@@ -227,7 +227,7 @@ export const buildMarketGraph = (
       kind: 'company',
       x: 70,
       y: 69,
-      summary: `Emerging entrant with narrow wedge and strong content footprint.`,
+      summary: `Emerging entrant with a narrow wedge and visible launch footprint.`,
       signal: 'New entrant',
       url: `https://${slugify(companies[2])}.ai`,
     },
@@ -237,8 +237,8 @@ export const buildMarketGraph = (
       kind: 'person',
       x: 17,
       y: 73,
-      summary: `Operator profile connected to product launches and sector commentary.`,
-      signal: 'Founder / operator',
+      summary: `Founder or operator profile connected to product launches and sector commentary.`,
+      signal: 'Founder lineage',
     },
     {
       id: 'person-2',
@@ -246,8 +246,8 @@ export const buildMarketGraph = (
       kind: 'person',
       x: 85,
       y: 67,
-      summary: `Visible expert source across talks, posts, and adjacent company activity.`,
-      signal: 'Market voice',
+      summary: `Visible market voice across talks, posts, and adjacent company activity.`,
+      signal: 'Operator signal',
     },
     {
       id: 'investor-1',
@@ -255,7 +255,7 @@ export const buildMarketGraph = (
       kind: 'investor',
       x: 83,
       y: 15,
-      summary: `Backs tools with industry-specific workflow depth.`,
+      summary: `Backs companies with category-specific workflow depth.`,
       signal: 'Capital cluster',
     },
     {
@@ -265,7 +265,7 @@ export const buildMarketGraph = (
       x: 37,
       y: 82,
       summary: `Source cluster for product messaging, customer claims, and category terms.`,
-      signal: 'Web evidence',
+      signal: 'Source evidence',
       url: `https://${websiteRoot || 'market'}-brief.com`,
     },
     {
@@ -274,7 +274,7 @@ export const buildMarketGraph = (
       kind: 'opportunity',
       x: 48,
       y: 70,
-      summary: `A narrow wedge where incumbents appear broad and buyers still stitch tools together.`,
+      summary: `White space where incumbents look broad and buyers still stitch tools together.`,
       signal: 'White space',
     },
     {
@@ -283,7 +283,7 @@ export const buildMarketGraph = (
       kind: 'opportunity',
       x: 62,
       y: 28,
-      summary: `A defensible layer around verification, provenance, or explainable recommendations.`,
+      summary: `A defensible layer around verification, provenance, and explainable recommendations.`,
       signal: 'Differentiation',
     },
   ]
@@ -296,7 +296,7 @@ export const buildMarketGraph = (
         kind: 'company',
         x: 8,
         y: 33,
-        summary: `Older platform with broad feature surface and partnership reach.`,
+        summary: `Incumbent platform with broad feature surface and partnership reach.`,
         signal: 'Incumbent',
         url: `https://${slugify(companies[3])}.com`,
       },
@@ -348,28 +348,28 @@ export const buildMarketGraph = (
   }
 
   return {
-    title: `${concept} market graph`,
-    subtitle: `${segment} | ${relationshipCount(depth)} mapped relationships | scan ${scanNumber}`,
+    title: `${concept} competitive graph`,
+    subtitle: `${segment} | ${relationshipCount(depth)} relationship paths | session ${scanNumber}`,
     nodes,
     edges,
     insights: [
       {
         label: 'Companies',
         value: String(nodes.filter((node) => node.kind === 'company').length),
-        detail: 'Ranked by velocity, focus, and graph proximity.',
+        detail: 'Mapped by relevance, positioning, and graph proximity.',
       },
       {
-        label: 'People',
+        label: 'Founders',
         value: String(nodes.filter((node) => node.kind === 'person').length),
         detail: 'Founder, operator, and market voice candidates.',
       },
       {
-        label: 'Web signals',
+        label: 'Sources',
         value: String(nodes.filter((node) => node.kind === 'website').length),
-        detail: 'Messaging, hiring, partnership, and content sources.',
+        detail: 'Messaging, hiring, launch, and source evidence.',
       },
       {
-        label: 'Open wedges',
+        label: 'White space',
         value: '2',
         detail: 'Relationship gaps worth validating first.',
       },
@@ -378,31 +378,31 @@ export const buildMarketGraph = (
       {
         name: companies[0],
         type: 'Major player',
-        activity: `Tightening product language around ${segment.toLowerCase()}.`,
-        signal: 'Messaging changed',
+        activity: `Competing directly for ${segment.toLowerCase()} with a sharper product wedge.`,
+        signal: 'Positioning pattern',
       },
       {
         name: companies[1],
         type: 'Fast mover',
-        activity: 'Adding integration-heavy roles and partner pages.',
-        signal: 'Hiring and site updates',
+        activity: 'Adding integration-heavy roles, partner pages, and workflow claims.',
+        signal: 'Hiring and site evidence',
       },
       {
         name: personA,
-        type: 'Person',
+        type: 'Founder signal',
         activity: `Publishing sector-specific takes on ${concept.toLowerCase()}.`,
-        signal: 'Thought leadership',
+        signal: 'Founder lineage',
       },
       {
         name: investorA,
         type: 'Investor',
-        activity: 'Clusters around workflow software with vertical data moats.',
-        signal: 'Portfolio pattern',
+        activity: 'Clusters around workflow software with category data moats.',
+        signal: 'Shared-investor path',
       },
     ],
     opportunities: [
       {
-        title: 'Narrower buyer wedge',
+        title: 'Narrow buyer wedge',
         reason: `Most mapped players speak broadly to ${segment.toLowerCase()}.`,
         wedge: 'Start with one painful workflow and expand from graph-adjacent jobs.',
       },

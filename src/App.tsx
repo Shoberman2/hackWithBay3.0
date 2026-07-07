@@ -30,16 +30,16 @@ import {
   type ScanMode,
 } from './lib/marketGraph'
 
-const DEFAULT_PROMPT = 'AI tools for independent insurance brokers'
+const DEFAULT_PROMPT = 'internship platform'
 
 const NODE_STYLE: Record<NodeKind, { label: string; icon: LucideIcon; color: string }> = {
-  idea: { label: 'Thesis', icon: Sparkles, color: '#2f6f68' },
+  idea: { label: 'Idea', icon: Sparkles, color: '#2f6f68' },
   company: { label: 'Companies', icon: Building2, color: '#c65a3a' },
-  person: { label: 'People', icon: UserRound, color: '#7c5a9b' },
-  website: { label: 'Websites', icon: Globe2, color: '#5276a7' },
+  person: { label: 'Founders', icon: UserRound, color: '#7c5a9b' },
+  website: { label: 'Sources', icon: Globe2, color: '#5276a7' },
   segment: { label: 'Segments', icon: Layers3, color: '#847332' },
   investor: { label: 'Investors', icon: BadgeCheck, color: '#517f45' },
-  opportunity: { label: 'Opportunities', icon: Lightbulb, color: '#b26b1f' },
+  opportunity: { label: 'White Space', icon: Lightbulb, color: '#b26b1f' },
   trend: { label: 'Trends', icon: TrendingUp, color: '#5f6f3a' },
 }
 
@@ -70,19 +70,19 @@ const shortLabel = (label: string) => {
 const envStatus = [
   {
     label: 'Butterbase',
-    detail: 'Auth, workspaces, billing',
+    detail: 'Auth, sessions, reports',
     configured: isButterbaseConfigured,
     icon: KeyRound,
   },
   {
     label: 'Neo4j',
-    detail: 'Property graph storage',
+    detail: 'Competitive graph storage',
     configured: Boolean(import.meta.env.VITE_NEO4J_GRAPH_ENDPOINT),
     icon: Database,
   },
   {
     label: 'RocketRide',
-    detail: 'Managed research pipeline',
+    detail: 'Research agent pipeline',
     configured: Boolean(import.meta.env.VITE_ROCKETRIDE_ENDPOINT),
     icon: Rocket,
   },
@@ -104,7 +104,7 @@ function GraphCanvas({
   const nodeById = new Map(nodes.map((node) => [node.id, node]))
 
   return (
-    <svg className="graph-canvas" viewBox="0 0 100 100" role="img" aria-label="Market graph">
+    <svg className="graph-canvas" viewBox="0 0 100 100" role="img" aria-label="Competitive landscape graph">
       {visibleEdges.map((edge) => {
         const from = nodeById.get(edge.from)
         const to = nodeById.get(edge.to)
@@ -192,12 +192,12 @@ function App() {
       <header className="topbar">
         <div>
           <div className="eyebrow">HackwithBay 3.0</div>
-          <h1>Startup Radar</h1>
+          <h1>Rivalry</h1>
         </div>
         <div className="topbar-actions">
           <div className="status-pill">
             <CircleDot size={16} />
-            Demo pipeline
+            Live graph demo
           </div>
           <button type="button" className="icon-button" aria-label="Filter graph">
             <Filter size={18} />
@@ -209,11 +209,11 @@ function App() {
         <aside className="panel scan-panel" aria-label="Scan controls">
           <div className="panel-heading">
             <Search size={18} />
-            <h2>Scan Brief</h2>
+            <h2>Founder Brief</h2>
           </div>
 
           <label className="field-label" htmlFor="scan-input">
-            Industry, idea, or company
+            Startup idea or competitive space
           </label>
           <textarea
             id="scan-input"
@@ -258,7 +258,7 @@ function App() {
 
           <button type="button" className="primary-button" onClick={runScan} disabled={isScanning}>
             {isScanning ? <Route size={18} /> : <Play size={18} />}
-            {isScanning ? 'Scanning' : 'Run scan'}
+            {isScanning ? 'Mapping' : 'Build graph'}
           </button>
 
           <div className="integration-list">
@@ -350,7 +350,7 @@ function App() {
           </div>
 
           <section className="side-section">
-            <h3>What They Are Doing</h3>
+            <h3>Landscape Signals</h3>
             <div className="activity-list">
               {graph.movers.map((item) => (
                 <article key={`${item.name}-${item.signal}`} className="activity-item">
@@ -366,7 +366,7 @@ function App() {
           </section>
 
           <section className="side-section">
-            <h3>Opportunity Map</h3>
+            <h3>White Space</h3>
             <div className="opportunity-list">
               {graph.opportunities.map((item) => (
                 <article key={item.title} className="opportunity-item">
@@ -379,7 +379,7 @@ function App() {
           </section>
 
           <section className="side-section">
-            <h3>Source Queue</h3>
+            <h3>Evidence Trail</h3>
             <div className="source-list">
               {graph.sources.map((source) => (
                 <a key={source.url} href={source.url} target="_blank" rel="noreferrer">

@@ -48,7 +48,7 @@ try {
     await session.close()
   }
 
-  console.log('Neo4j startup graph is ready')
+  console.log('Neo4j Rivalry graph is ready')
 } finally {
   await driver.close()
 }

@@ -2,6 +2,8 @@
 
 **HackwithBay 3.0 submission. Built on Neo4j, RocketRide Cloud, and Butterbase.**
 
+See [PRODUCT_VISION.md](/Users/shoberman/charityChecker/PRODUCT_VISION.md) for the distilled product vision derived from this plan.
+
 ---
 
 ## 1. What This Is
@@ -166,3 +168,26 @@ What is OUT:
 - **Frontend + Butterbase:** live graph viz (force-directed, streaming node arrival), onboarding flow, auth, payment gate, report renderer
 
 First milestone by hour 3: one company flowing end to end from a search result to a rendered node on screen. Everything else is iteration on a working spine.
+
+## 12. Local Prototype Setup
+
+```bash
+npm install
+npm run dev
+```
+
+Copy `.env.example` to `.env.local` for real service credentials. Keep service keys and database passwords in `.env.local`; it is ignored by git.
+
+### Butterbase
+
+The frontend is wired through [src/lib/butterbase.ts](/Users/shoberman/charityChecker/src/lib/butterbase.ts). Apply [butterbase/schema.json](/Users/shoberman/charityChecker/butterbase/schema.json) and enable the policies in [butterbase/rls.json](/Users/shoberman/charityChecker/butterbase/rls.json).
+
+### Neo4j
+
+Add the generated Aura URI, username, password, and database name to `.env.local`, then seed the graph:
+
+```bash
+npm run neo4j:seed
+```
+
+The schema and demo data live in [neo4j/schema.cypher](/Users/shoberman/charityChecker/neo4j/schema.cypher) and [neo4j/seed.cypher](/Users/shoberman/charityChecker/neo4j/seed.cypher).
