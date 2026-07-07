@@ -9,7 +9,7 @@
  *   enforced here, not by convention).
  * - Relationship MERGE MATCHes both endpoints first; never MERGEs a full
  *   path pattern.
- * - Returns the written entities in react-force-graph shape so the
+ * - Returns the written entities in graph-view shape so the
  *   conductor can stream them to the client without a re-read.
  * - Demo mode (!hasNeo4j()): skips the DB round-trips but still returns
  *   the graph-shaped result so the streaming path works without creds.

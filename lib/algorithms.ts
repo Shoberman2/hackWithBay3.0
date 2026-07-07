@@ -30,7 +30,7 @@ function round4(value: number): number {
 /**
  * Compute community / pagerank / betweenness over the given graph and
  * return the same node array with those properties assigned (mutates the
- * node references so react-force-graph keeps positions).
+ * node references so the graph view keeps positions).
  */
 export function assignGraphMetrics(
   nodes: GraphNode[],

@@ -16,6 +16,7 @@ import { useProgressiveGraph } from "@/hooks/useProgressiveGraph";
 import LiveGraph from "@/components/graph/LiveGraph";
 import SummaryTable from "@/components/graph/SummaryTable";
 import NodeDetailPanel from "@/components/graph/NodeDetailPanel";
+import CompanyTimeline from "@/components/graph/CompanyTimeline";
 import InsightCards from "@/components/graph/InsightCards";
 import GraphLegend from "@/components/graph/GraphLegend";
 import StreamStatus from "@/components/graph/StreamStatus";
@@ -64,6 +65,9 @@ export default function SessionPage({
   const [selected, setSelected] = useState<GraphNode | null>(null);
   const [expandError, setExpandError] = useState<string | null>(null);
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [timelineCompany, setTimelineCompany] = useState<GraphNode | null>(
+    null,
+  );
 
   // Paid report flow: paywall -> checkout -> generated markdown.
   const [reportOpen, setReportOpen] = useState(false);
@@ -145,6 +149,8 @@ export default function SessionPage({
   const handleSelect = useCallback((node: GraphNode | null) => {
     setSelected(node);
     setExpandError(null);
+    // Clicking a company pops its full startup-history timeline.
+    if (node?.label === "Company") setTimelineCompany(node);
   }, []);
 
   const handleExpand = useCallback(
@@ -303,6 +309,7 @@ export default function SessionPage({
               expanding={false}
               expandError={expandError}
               onExpand={handleExpand}
+              onTimeline={setTimelineCompany}
               onClose={() => handleSelect(null)}
             />
           )}
@@ -347,6 +354,15 @@ export default function SessionPage({
           />
         </div>
       </aside>
+
+      {/* Company timeline popup: the full startup history on node click */}
+      {timelineCompany && (
+        <CompanyTimeline
+          company={timelineCompany}
+          data={data}
+          onClose={() => setTimelineCompany(null)}
+        />
+      )}
 
       {/* Report overlay: paywall until purchased, then the rendered report */}
       {reportOpen && (

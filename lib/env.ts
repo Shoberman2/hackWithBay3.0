@@ -38,6 +38,11 @@ export const env = {
   // the app POSTs to — no local .pipe upload. URL includes ?auth=<public token>.
   ROCKETRIDE_ENDPOINT: read("ROCKETRIDE_ENDPOINT"),
 
+  // Daytona (sandboxed analysis scripts)
+  DAYTONA_API_KEY: read("DAYTONA_API_KEY"),
+  DAYTONA_API_URL: read("DAYTONA_API_URL") ?? "https://app.daytona.io/api",
+  DAYTONA_TARGET: read("DAYTONA_TARGET"),
+
   // Data sources
   GITHUB_TOKEN: read("GITHUB_TOKEN"),
   PRODUCTHUNT_TOKEN: read("PRODUCTHUNT_TOKEN"),
@@ -77,6 +82,11 @@ export function hasRocketRide(): boolean {
  */
 export function hasRocketRideEndpoint(): boolean {
   return Boolean(env.ROCKETRIDE_ENDPOINT);
+}
+
+/** True when Daytona sandboxes can be created. */
+export function hasDaytona(): boolean {
+  return Boolean(env.DAYTONA_API_KEY);
 }
 
 export function hasGitHub(): boolean {

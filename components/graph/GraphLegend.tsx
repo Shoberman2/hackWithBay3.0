@@ -1,22 +1,24 @@
 "use client";
 
 /**
- * GraphLegend -- node-type key for the labels currently on the canvas.
- * Rendered as a floating card by the session layout (bottom-left).
+ * GraphLegend -- key for the progressive-disclosure graph model.
+ * Companies are the default view; founders, investors, and funding rounds
+ * fan out when a company is clicked. Rendered as a floating card by the
+ * session layout (bottom-left).
  */
 
-import { useMemo } from "react";
 import type { GraphNode, NodeLabel } from "@/lib/types";
-import { LABEL_ORDER, LABEL_TEXT, NODE_COLORS } from "./graph-utils";
+import { LABEL_TEXT, NODE_COLORS } from "./graph-utils";
+
+const LEGEND_LABELS: NodeLabel[] = [
+  "Company",
+  "Founder",
+  "Investor",
+  "FundingRound",
+];
 
 export default function GraphLegend({ nodes }: { nodes: GraphNode[] }) {
-  const present = useMemo(() => {
-    const seen = new Set<NodeLabel>();
-    for (const node of nodes) seen.add(node.label);
-    return LABEL_ORDER.filter((label) => seen.has(label));
-  }, [nodes]);
-
-  if (present.length === 0) return null;
+  if (nodes.length === 0) return null;
 
   return (
     <div
@@ -24,7 +26,7 @@ export default function GraphLegend({ nodes }: { nodes: GraphNode[] }) {
       aria-label="Node type legend"
     >
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {present.map((label) => (
+        {LEGEND_LABELS.map((label) => (
           <div key={label} className="flex items-center gap-2">
             <span
               className="h-2 w-2 shrink-0 rounded-full"
@@ -36,6 +38,9 @@ export default function GraphLegend({ nodes }: { nodes: GraphNode[] }) {
           </div>
         ))}
       </div>
+      <p className="mt-2 text-[11px] leading-4" style={{ color: "#787774" }}>
+        Click a company to see who funds and builds it.
+      </p>
     </div>
   );
 }

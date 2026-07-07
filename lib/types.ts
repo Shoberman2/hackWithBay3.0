@@ -214,7 +214,7 @@ export interface ExtractedBatch {
 }
 
 /* ------------------------------------------------------------------ */
-/* Graph view shapes (react-force-graph)                               */
+/* Graph view shapes (NVL graph view)                                  */
 /* ------------------------------------------------------------------ */
 
 export interface GraphNode {
@@ -225,6 +225,8 @@ export interface GraphNode {
   community?: number;
   /** PageRank score (written by insight pass). */
   pagerank?: number;
+  /** Company favicon/logo image (Google favicon service), when known. */
+  logo_url?: string;
   source_url?: string;
   /** Any additional label-specific properties. */
   [key: string]: unknown;
@@ -302,4 +304,15 @@ export interface AgentAnswer {
     nodeIds: string[];
     linkKeys: string[];
   };
+  /** Present when a Daytona sandbox ran a quantitative pass over the graph. */
+  analysis?: SandboxAnalysis;
+}
+
+/** Result of a sandboxed analysis script run over the session graph. */
+export interface SandboxAnalysis {
+  engine: "daytona";
+  /** The Python script the agent generated and executed. */
+  script: string;
+  /** Raw stdout from the sandbox run. */
+  output: string;
 }

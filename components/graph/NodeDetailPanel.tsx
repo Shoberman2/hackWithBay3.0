@@ -40,6 +40,8 @@ interface NodeDetailPanelProps {
   expanding: boolean;
   expandError: string | null;
   onExpand: (node: GraphNode) => void;
+  /** Opens the full company-history timeline popup (Company nodes only). */
+  onTimeline?: (node: GraphNode) => void;
   onClose: () => void;
 }
 
@@ -49,6 +51,7 @@ export default function NodeDetailPanel({
   expanding,
   expandError,
   onExpand,
+  onTimeline,
   onClose,
 }: NodeDetailPanelProps) {
   const nodeById = useMemo(() => {
@@ -293,6 +296,15 @@ export default function NodeDetailPanel({
         </div>
 
         <div>
+          {label === "Company" && onTimeline && (
+            <button
+              type="button"
+              onClick={() => onTimeline(node)}
+              className="mb-2 w-full rounded-[6px] border border-line px-3 py-2 text-sm font-medium text-ink transition hover:bg-surface active:scale-[0.98]"
+            >
+              Company timeline
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onExpand(node)}

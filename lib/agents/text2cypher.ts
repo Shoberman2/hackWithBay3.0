@@ -8,7 +8,8 @@
 import { chat, type ChatMessage } from "@/lib/gateway";
 import { env, isDemoMode, hasNeo4j } from "@/lib/env";
 import { runRead, getSchemaString } from "@/lib/neo4j";
-import type { AgentAnswer } from "@/lib/types";
+import { isQuantitative, runSandboxAnalysis } from "@/lib/daytona";
+import type { AgentAnswer, SandboxAnalysis } from "@/lib/types";
 import {
   getSessionGraph,
   highlightFor,
@@ -296,26 +297,33 @@ async function summarize(
   question: string,
   cypher: string,
   records: Array<Record<string, unknown>>,
+  analysis: SandboxAnalysis | null,
 ): Promise<string> {
-  if (records.length === 0) {
+  if (records.length === 0 && !analysis) {
     return "The query ran but returned no rows - the graph holds no data matching that question yet.";
   }
-  const fallback = `The query returned ${records.length} row${
-    records.length === 1 ? "" : "s"
-  }. First rows: ${JSON.stringify(records.slice(0, 5))}`;
+  const fallback = analysis
+    ? analysis.output
+    : `The query returned ${records.length} row${
+        records.length === 1 ? "" : "s"
+      }. First rows: ${JSON.stringify(records.slice(0, 5))}`;
   try {
     return await chat(
       [
         {
           role: "system",
           content:
-            "You summarize Neo4j query results for a startup founder in 2-4 plain sentences. Use only facts present in the rows - concrete names and numbers, no speculation. No markdown.",
+            "You summarize graph query results for a startup founder in 2-4 plain sentences. Use only facts present in the rows (and the computed analysis output, when provided) - concrete names and numbers, no speculation. No markdown.",
         },
         {
           role: "user",
           content: `Question: ${question}\nCypher: ${cypher}\nRows (JSON): ${JSON.stringify(
             records.slice(0, 50),
-          )}`,
+          )}${
+            analysis
+              ? `\nComputed analysis (ran in an isolated sandbox over the full graph):\n${analysis.output}`
+              : ""
+          }`,
         },
       ],
       { temperature: 0.2 },
@@ -332,8 +340,22 @@ export async function answerQuestion(
 ): Promise<AgentAnswer> {
   const graph = await getSessionGraph(sessionId);
 
+  // Quantitative questions get a parallel sandboxed computation pass
+  // (Daytona) alongside the answer path. The sandbox operates on the
+  // session graph (fixture included), so it does not require Neo4j —
+  // only DAYTONA_API_KEY + the gateway + DEMO_MODE=false.
+  const analysisPromise = isQuantitative(question)
+    ? runSandboxAnalysis(question, graph)
+    : Promise.resolve(null);
+
   if (isDemoMode()) {
-    return demoAnswer(question, graph);
+    const base = demoAnswer(question, graph);
+    const analysis = await analysisPromise;
+    if (!analysis) return base;
+    // Sandbox ran even though Neo4j is absent: fold its output into the
+    // prose (summarize falls back to the raw output on gateway failure).
+    const answer = await summarize(question, base.cypher ?? "", [], analysis);
+    return { ...base, answer, analysis };
   }
 
   const schema = await getSchema();
@@ -353,11 +375,13 @@ export async function answerQuestion(
       );
       records = await runRead<Record<string, unknown>>(cypher, params);
     }
-    const answer = await summarize(question, cypher, records);
+    const analysis = await analysisPromise;
+    const answer = await summarize(question, cypher, records, analysis);
     return {
       answer,
       cypher,
       highlight: matchRecordsToGraph(records, graph),
+      analysis: analysis ?? undefined,
     };
   } catch (error) {
     if (env.DEBUG) {

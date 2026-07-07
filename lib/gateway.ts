@@ -31,6 +31,7 @@ export type ChatPurpose =
   | "answer"
   | "insight"
   | "report"
+  | "timeline"
   | "generic";
 
 export interface ChatOptions {
@@ -359,6 +360,7 @@ function sniffPurpose(messages: ChatMessage[], options: ChatOptions): ChatPurpos
   if (text.includes("refined_idea")) return "onboarding-result";
   if (text.includes("sharpening question") || text.includes("onboarding"))
     return "onboarding-question";
+  if (text.includes("timeline event")) return "timeline";
   if (text.includes("extractedbatch") || text.includes("relationships"))
     return "extraction";
   if (text.includes("cypher")) return "cypher";
@@ -409,6 +411,8 @@ function cannedCompletion(messages: ChatMessage[], options: ChatOptions): string
         body: "Six segments are contested, but the international-students segment has zero companies competing in it. Visa-sponsoring internships are the unclaimed wedge.",
         highlight: { nodeIds: ["segment:international-students"], linkKeys: [] },
       });
+    case "timeline":
+      return JSON.stringify({ events: [] });
     case "report":
       return DEMO_REPORT_MARKDOWN;
     case "generic":

@@ -122,9 +122,9 @@ Built locally in the RocketRide VS Code extension, deployed to cloud.rocketride.
 
 Agent memory across sessions. When a founder returns or refines their idea, the agent remembers what it already ingested and only fetches deltas. Also remembers the founder's own context ("user cares about the university-partnered segment") so follow-up questions get sharper. Cheap points, natural fit.
 
-### Daytona (optional, likely cut)
+### Daytona (integrated)
 
-Could give the agent a sandbox to run ad-hoc analysis scripts over exported graph data. Nice to have, not core. Cut if time is tight, which it will be.
+Gives the Q&A agent a compute lane the graph query can't cover. When a founder asks a quantitative question (rankings, averages, distributions, funding totals), the agent writes a small Python script and executes it in a disposable Daytona sandbox with the exported session graph mounted as JSON — LLM-generated code never runs in the app process. The sandbox output feeds the final answer and is shown in the chat under "Sandbox analysis · Daytona". Demo mode and missing credentials skip the pass cleanly; the agent then answers from the graph traversal alone.
 
 ## 6. Data Sources
 

@@ -95,7 +95,7 @@ export const COMMUNITY_TINTS = [
 ];
 
 /**
- * react-force-graph mutates link.source/link.target from id strings to node
+ * the graph view mutates link.source/link.target from id strings to node
  * object references once the simulation ingests them. Always resolve through
  * this helper before comparing endpoints.
  */
