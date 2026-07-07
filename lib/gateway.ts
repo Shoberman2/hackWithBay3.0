@@ -68,7 +68,12 @@ function debugLog(...args: unknown[]): void {
 }
 
 function gatewayInDemoMode(): boolean {
-  return env.DEMO_MODE || !hasGateway();
+  // The gateway is decoupled from the global DEMO_MODE switch: whenever a
+  // real gateway key is present we make live LLM calls, so onboarding and
+  // the agents generate genuine, idea-specific output even while the graph
+  // pipeline still runs on fixtures (no Neo4j/RocketRide needed). Only when
+  // no key exists do we fall back to canned completions.
+  return !hasGateway();
 }
 
 /* ------------------------------------------------------------------ */
