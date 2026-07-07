@@ -29,6 +29,9 @@ export const env = {
   BUTTERBASE_ANON_KEY: read("BUTTERBASE_ANON_KEY"),
   BUTTERBASE_AI_KEY: read("BUTTERBASE_AI_KEY"),
   BUTTERBASE_API_URL: read("BUTTERBASE_API_URL") ?? "https://api.butterbase.ai",
+  // Overridable so a wrong/renamed model id can be fixed via Vercel env
+  // without a redeploy of code. Must be a model the gateway actually serves.
+  BUTTERBASE_MODEL: read("BUTTERBASE_MODEL") ?? "anthropic/claude-3.5-sonnet",
 
   // RocketRide
   ROCKETRIDE_APIKEY: read("ROCKETRIDE_APIKEY"),

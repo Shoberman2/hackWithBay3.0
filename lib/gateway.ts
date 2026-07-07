@@ -58,7 +58,7 @@ export class GatewayError extends Error {
   }
 }
 
-const DEFAULT_MODEL = "anthropic/claude-sonnet-4.5";
+const DEFAULT_MODEL = env.BUTTERBASE_MODEL;
 const RETRYABLE = (status: number) => status === 429 || status >= 500;
 
 function debugLog(...args: unknown[]): void {
