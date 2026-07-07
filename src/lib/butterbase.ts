@@ -1,5 +1,6 @@
-import { createClient, type User } from '@butterbase/sdk'
-import type { MarketGraph, ScanDepth, ScanMode } from './marketGraph'
+import { createClient, type RealtimeChange, type User } from '@butterbase/sdk'
+import type { Company, IndustryStats, MarketGraph, ScanDepth, ScanMode } from './marketGraph'
+import { formatUsd } from './marketGraph'
 
 type ButterbaseFeatureTone = 'ready' | 'hooked' | 'free' | 'off'
 export type UpdateCadence = 'daily' | 'weekly' | 'major'
@@ -10,12 +11,39 @@ export interface ButterbaseFeature {
   tone: ButterbaseFeatureTone
 }
 
+export interface OnboardingAnswer {
+  question: string
+  answer: string
+  signal?: string
+}
+
 export interface ScanSaveInput {
   graph: MarketGraph
   prompt: string
   mode: ScanMode
   depth: ScanDepth
   scanNumber: number
+  onboarding?: OnboardingAnswer[]
+}
+
+export interface NeoResult {
+  text: string
+  model: string
+  source: 'gateway' | 'local'
+}
+
+export interface GraphAnswer {
+  question: string
+  answer: string
+  cypher: string
+  source: 'gateway' | 'local'
+}
+
+export interface SupporterProduct {
+  id: string
+  name: string
+  priceLabel: string
+  configured: boolean
 }
 
 export interface SavedScanResult {
@@ -133,13 +161,13 @@ export const butterbaseFeatures: ButterbaseFeature[] = [
   },
   {
     label: 'AI Gateway',
-    detail: 'Ready for report and extraction calls through Butterbase.',
-    tone: 'hooked',
+    detail: 'Neo analyst + graph Q&A run through the Butterbase model gateway.',
+    tone: isButterbaseConfigured ? 'ready' : 'hooked',
   },
   {
-    label: 'No Paywall',
-    detail: 'Every core feature is free to use.',
-    tone: 'off',
+    label: 'Payments',
+    detail: 'Optional supporter checkout keeps every core feature free.',
+    tone: isButterbaseConfigured ? 'ready' : 'hooked',
   },
 ]
 
@@ -470,25 +498,43 @@ export const saveScanSnapshot = async (input: ScanSaveInput): Promise<SavedScanR
     },
   ])
 
+  const companyById = new Map<string, Company>(input.graph.companies.map((company) => [company.id, company]))
+
   tableWrites += await insertRows(
     'scan_entities',
-    input.graph.nodes.map((node) => ({
-      id: crypto.randomUUID(),
-      scan_id: scanId,
-      user_id: user.id,
-      external_id: node.id,
-      kind: node.kind,
-      name: node.label,
-      summary: node.summary,
-      url: node.url ?? null,
-      signal: node.signal,
-      score: node.kind === 'opportunity' ? 0.84 : 0.72,
-      metadata: {
-        x: node.x,
-        y: node.y,
-        generated_at: input.graph.generatedAt,
-      },
-    })),
+    input.graph.nodes.map((node) => {
+      const company = companyById.get(node.id)
+      return {
+        id: crypto.randomUUID(),
+        scan_id: scanId,
+        user_id: user.id,
+        external_id: node.id,
+        kind: node.kind,
+        name: node.label,
+        summary: node.summary,
+        url: node.url ?? null,
+        signal: node.signal,
+        score: node.kind === 'opportunity' ? 0.84 : 0.72,
+        metadata: {
+          x: node.x,
+          y: node.y,
+          tier: node.tier,
+          generated_at: input.graph.generatedAt,
+          ...(company
+            ? {
+                stage: company.stage,
+                raise_usd: company.raiseUsd,
+                founded_year: company.foundedYear,
+                moat: company.moat,
+                moat_score: company.moatScore,
+                momentum: company.momentum,
+                lead_investor: company.leadInvestor,
+                segment: company.segment,
+              }
+            : {}),
+        },
+      }
+    }),
   )
 
   tableWrites += await insertRows(
@@ -531,24 +577,28 @@ export const saveScanSnapshot = async (input: ScanSaveInput): Promise<SavedScanR
     })),
   )
 
-  tableWrites += await insertRows('onboarding_answers', [
-    {
+  const onboardingRows =
+    input.onboarding && input.onboarding.length > 0
+      ? input.onboarding
+      : [
+          {
+            question: 'Which buyer or segment should Rivalry prioritize first?',
+            answer: input.graph.segment,
+            signal: 'Narrows graph discovery and report framing.',
+          },
+        ]
+
+  tableWrites += await insertRows(
+    'onboarding_answers',
+    onboardingRows.map((row) => ({
       id: crypto.randomUUID(),
       scan_id: scanId,
       user_id: user.id,
-      question: 'Which buyer or segment should Rivalry prioritize first?',
-      answer: input.graph.nodes.find((node) => node.id === 'segment')?.label ?? input.prompt,
-      signal: 'Narrows graph discovery and report framing.',
-    },
-    {
-      id: crypto.randomUUID(),
-      scan_id: scanId,
-      user_id: user.id,
-      question: 'How should Rivalry handle monetization?',
-      answer: 'Keep the graph, saved scan, evidence bundle, and report draft free.',
-      signal: 'Payments intentionally disabled.',
-    },
-  ])
+      question: row.question,
+      answer: row.answer,
+      signal: row.signal ?? 'Founder onboarding answer.',
+    })),
+  )
 
   tableWrites += await insertRows('graph_questions', [
     {
@@ -727,5 +777,245 @@ export const saveIndustryUpdatePreference = async (
     message: input.enabled
       ? `Industry updates are on for ${topic}.`
       : `Industry updates are paused for ${topic}.`,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Neo — the graph-native market analyst, powered by the Butterbase AI gateway
+// ---------------------------------------------------------------------------
+
+const NEO_MODEL = 'claude-sonnet-5'
+
+const localIndustryNarrative = (topic: string, industry: IndustryStats, companies: Company[]) => {
+  const ranked = [...companies].sort((a, b) => b.raiseUsd - a.raiseUsd)
+  const leader = ranked[0]
+  const challenger = ranked.find((company) => company.momentum >= 70 && company.id !== leader?.id) ?? ranked[1]
+  const lines = [
+    `The ${topic} landscape has ${industry.companyCount} tracked players holding ${formatUsd(
+      industry.totalRaisedUsd,
+    )} in disclosed capital, concentrated at the ${industry.topStage} stage.`,
+    leader
+      ? `${leader.name} anchors the category with ${formatUsd(leader.raiseUsd)} raised and a ${leader.moat.toLowerCase()} moat (${leader.moatScore}/100) — it is the company everyone else is positioned against.`
+      : '',
+    challenger
+      ? `${challenger.name} shows the strongest momentum (${challenger.momentum}/100), pushing on the ${challenger.segment} segment.`
+      : '',
+    `Capital is hottest in ${industry.hottestSegment}. The clearest opening: ${industry.whitespace}`,
+  ]
+  return lines.filter(Boolean).join(' ')
+}
+
+export const askNeoAnalyst = async (
+  topic: string,
+  industry: IndustryStats,
+  companies: Company[],
+): Promise<NeoResult> => {
+  const fallback: NeoResult = {
+    text: localIndustryNarrative(topic, industry, companies),
+    model: 'rivalry-local',
+    source: 'local',
+  }
+
+  if (!butterbase) return fallback
+
+  try {
+    const table = companies
+      .map(
+        (company) =>
+          `${company.name} | ${company.stage} | ${formatUsd(company.raiseUsd)} raised | moat ${company.moat} ${company.moatScore}/100 | momentum ${company.momentum}/100 | segment ${company.segment} | founded ${company.foundedYear} | lead investor ${company.leadInvestor}`,
+      )
+      .join('\n')
+
+    const { data, error } = await butterbase.ai.chat(
+      [
+        {
+          role: 'system',
+          content:
+            'You are Neo, a graph-native competitive-market analyst inside Rivalry. You reason over a Neo4j landscape graph. Write one tight paragraph (max 90 words) that explains the industry: who leads and why, where momentum is, and the single clearest white space. Be specific with numbers. No preamble, no bullet points.',
+        },
+        {
+          role: 'user',
+          content: `Idea/space: ${topic}\n\nIndustry stats: ${industry.companyCount} companies, ${formatUsd(
+            industry.totalRaisedUsd,
+          )} total raised, median raise ${formatUsd(industry.medianRaiseUsd)}, dominant stage ${
+            industry.topStage
+          }, hottest segment ${industry.hottestSegment}, best funded ${industry.mostBacked}, average moat ${
+            industry.avgMoat
+          }/100, white space: ${industry.whitespace}.\n\nCompanies:\n${table}`,
+        },
+      ],
+      { model: NEO_MODEL, temperature: 0.4, maxTokens: 320 },
+    )
+
+    const text = data?.choices?.[0]?.message?.content?.trim()
+    if (error || !text) return fallback
+    return { text, model: data?.model ?? NEO_MODEL, source: 'gateway' }
+  } catch {
+    return fallback
+  }
+}
+
+const localGraphAnswer = (question: string, industry: IndustryStats, companies: Company[]): GraphAnswer => {
+  const lower = question.toLowerCase()
+  const ranked = [...companies].sort((a, b) => b.raiseUsd - a.raiseUsd)
+
+  if (/invest|fund|capital|backer/.test(lower)) {
+    const shared = new Map<string, string[]>()
+    companies.forEach((company) =>
+      company.investors.forEach((inv) => shared.set(inv, [...(shared.get(inv) ?? []), company.name])),
+    )
+    const cluster = [...shared.entries()].find(([, list]) => list.length >= 2)
+    return {
+      question,
+      answer: cluster
+        ? `${cluster[0]} backs ${cluster[1].join(' and ')} — a shared-investor path. If capital consolidates, these players merge or one absorbs the other.`
+        : `Capital is concentrated in ${industry.mostBacked}; no two tracked players yet share a lead investor.`,
+      cypher:
+        'MATCH (a:Company)<-[:INVESTED_IN]-(i:Investor)-[:INVESTED_IN]->(b:Company) WHERE a<>b RETURN i.name, collect(DISTINCT a.name)',
+      source: 'local',
+    }
+  }
+
+  if (/white ?space|gap|opening|opportunit/.test(lower)) {
+    return {
+      question,
+      answer: `The structural gap: ${industry.whitespace}`,
+      cypher:
+        'MATCH (s:Segment) WHERE NOT (:Company)-[:COMPETES_IN]->(s) OR size((:Company)-[:COMPETES_IN]->(s)) < 2 RETURN s.name',
+      source: 'local',
+    }
+  }
+
+  if (/founder|lineage|team|operator/.test(lower)) {
+    return {
+      question,
+      answer: `Founder lineage clusters out of the incumbents — expand a company node to trace WORKED_AT edges into prior employers.`,
+      cypher: 'MATCH (f:Founder)-[:WORKED_AT]->(c:Company) RETURN c.name, collect(f.name) ORDER BY size(collect(f.name)) DESC',
+      source: 'local',
+    }
+  }
+
+  return {
+    question,
+    answer: `${ranked[0]?.name} leads on capital (${formatUsd(ranked[0]?.raiseUsd ?? 0)}); the highest-momentum challenger is ${
+      [...companies].sort((a, b) => b.momentum - a.momentum)[0]?.name
+    }.`,
+    cypher: 'MATCH (c:Company)-[:COMPETES_IN]->(s:Segment) RETURN c.name, c.raise, s.name ORDER BY c.raise DESC',
+    source: 'local',
+  }
+}
+
+export const askGraphQuestion = async (
+  question: string,
+  industry: IndustryStats,
+  companies: Company[],
+): Promise<GraphAnswer> => {
+  const fallback = localGraphAnswer(question, industry, companies)
+  if (!butterbase || !question.trim()) return fallback
+
+  try {
+    const table = companies
+      .map((c) => `${c.name}: ${c.stage}, ${formatUsd(c.raiseUsd)}, moat ${c.moat}, investors ${c.investors.join('/')}, founders ${c.founders.join('/')}, segment ${c.segment}`)
+      .join('\n')
+
+    const { data, error } = await butterbase.ai.chat(
+      [
+        {
+          role: 'system',
+          content:
+            'You are Neo inside Rivalry, answering founder questions by reasoning over a Neo4j competitive graph. Answer in 2 sentences max, concrete and specific. Focus on relationships (shared investors, founder lineage, competitive clusters, white space).',
+        },
+        { role: 'user', content: `Graph companies:\n${table}\n\nQuestion: ${question}` },
+      ],
+      { model: NEO_MODEL, temperature: 0.3, maxTokens: 200 },
+    )
+
+    const text = data?.choices?.[0]?.message?.content?.trim()
+    if (error || !text) return fallback
+    return { question, answer: text, cypher: fallback.cypher, source: 'gateway' }
+  } catch {
+    return fallback
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Realtime — stream pipeline events for a saved scan
+// ---------------------------------------------------------------------------
+
+export interface PipelineEvent {
+  event_type?: string
+  message?: string
+  created_at?: string
+}
+
+export const subscribeToPipelineEvents = (
+  onEvent: (event: PipelineEvent) => void,
+): (() => void) => {
+  if (!butterbase) return () => {}
+
+  try {
+    butterbase.realtime.connect()
+    const subscription = butterbase.realtime.on('pipeline_events', (change: RealtimeChange) => {
+      const record = change.record as PipelineEvent | null
+      if (record) onEvent(record)
+    })
+    return () => {
+      try {
+        subscription.unsubscribe()
+      } catch {
+        // ignore teardown errors
+      }
+    }
+  } catch {
+    return () => {}
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Payments — optional supporter checkout (core stays free)
+// ---------------------------------------------------------------------------
+
+const SUPPORTER_PRODUCT_NAME = 'Rivalry Supporter'
+
+export const loadSupporterProduct = async (): Promise<SupporterProduct> => {
+  const fallback: SupporterProduct = {
+    id: 'supporter',
+    name: SUPPORTER_PRODUCT_NAME,
+    priceLabel: '$5',
+    configured: false,
+  }
+  if (!butterbase) return fallback
+
+  try {
+    const { data, error } = await butterbase.billing.listProducts()
+    if (error) return fallback
+    const product = data?.find((item) => item.name === SUPPORTER_PRODUCT_NAME) ?? data?.[0]
+    if (!product) return fallback
+    return {
+      id: product.id,
+      name: product.name,
+      priceLabel: formatUsd(product.price_cents / 100),
+      configured: true,
+    }
+  } catch {
+    return fallback
+  }
+}
+
+export const startSupport = async (productId: string): Promise<{ url?: string; message: string }> => {
+  if (!butterbase) return { message: 'Connect Butterbase billing to enable supporter checkout.' }
+
+  try {
+    const { data, error } = await butterbase.billing.purchase({
+      productId,
+      successUrl: `${window.location.origin}?support=success`,
+      cancelUrl: `${window.location.origin}?support=cancel`,
+    })
+    if (error || !data?.url) {
+      return { message: 'Supporter checkout is not connected yet — every feature stays free.' }
+    }
+    return { url: data.url, message: 'Opening supporter checkout.' }
+  } catch {
+    return { message: 'Supporter checkout is not connected yet — every feature stays free.' }
   }
 }
