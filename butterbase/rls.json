@@ -1,0 +1,10 @@
+{
+  "policies": [
+    { "table_name": "workspaces", "user_column": "user_id" },
+    { "table_name": "startup_scans", "user_column": "user_id" },
+    { "table_name": "scan_entities", "user_column": "user_id" },
+    { "table_name": "scan_relationships", "user_column": "user_id" },
+    { "table_name": "research_sources", "user_column": "user_id" },
+    { "table_name": "opportunity_notes", "user_column": "user_id" }
+  ]
+}

@@ -1,0 +1,85 @@
+{
+  "name": "startup-radar-core",
+  "schema": {
+    "tables": {
+      "workspaces": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "user_id": { "type": "uuid", "nullable": false },
+          "name": { "type": "text", "nullable": false },
+          "created_at": { "type": "timestamptz", "default": "now()" },
+          "updated_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "startup_scans": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "workspace_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "prompt": { "type": "text", "nullable": false },
+          "mode": { "type": "text", "nullable": false },
+          "depth": { "type": "text", "nullable": false },
+          "neo4j_graph_id": { "type": "text" },
+          "rocketride_run_id": { "type": "text" },
+          "status": { "type": "text", "nullable": false, "default": "'draft'" },
+          "summary": { "type": "text" },
+          "created_at": { "type": "timestamptz", "default": "now()" },
+          "updated_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "scan_entities": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "external_id": { "type": "text", "nullable": false },
+          "kind": { "type": "text", "nullable": false },
+          "name": { "type": "text", "nullable": false },
+          "summary": { "type": "text" },
+          "url": { "type": "text" },
+          "signal": { "type": "text" },
+          "score": { "type": "numeric" },
+          "metadata": { "type": "jsonb", "default": "'{}'::jsonb" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "scan_relationships": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "source_external_id": { "type": "text", "nullable": false },
+          "target_external_id": { "type": "text", "nullable": false },
+          "relationship_type": { "type": "text", "nullable": false },
+          "strength": { "type": "text", "nullable": false },
+          "evidence": { "type": "text" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "research_sources": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "title": { "type": "text", "nullable": false },
+          "url": { "type": "text", "nullable": false },
+          "source_type": { "type": "text", "nullable": false },
+          "signal": { "type": "text" },
+          "extracted_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "opportunity_notes": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "scan_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "title": { "type": "text", "nullable": false },
+          "reason": { "type": "text", "nullable": false },
+          "wedge": { "type": "text", "nullable": false },
+          "confidence": { "type": "numeric" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
+      }
+    }
+  }
+}
