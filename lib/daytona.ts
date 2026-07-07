@@ -50,11 +50,24 @@ function stripFences(text: string): string {
   return fenced ? fenced[1] : trimmed;
 }
 
+/** Actual property keys per node label, so the generated script never
+ *  guesses field names. Keys are flat on the node object. */
+function keysByLabel(graph: SessionGraph): string {
+  const byLabel = new Map<string, Set<string>>();
+  for (const node of graph.nodes) {
+    const keys = byLabel.get(node.label) ?? new Set<string>();
+    for (const key of Object.keys(node)) keys.add(key);
+    byLabel.set(node.label, keys);
+  }
+  return [...byLabel.entries()]
+    .map(([label, keys]) => `${label}: ${[...keys].join(", ")}`)
+    .join("\n");
+}
+
 async function generateScript(
   question: string,
   graph: SessionGraph,
 ): Promise<string> {
-  const labels = [...new Set(graph.nodes.map((n) => n.label))];
   const relTypes = [...new Set(graph.links.map((l) => l.type))];
   const raw = await chat(
     [
@@ -63,10 +76,14 @@ async function generateScript(
         content:
           "You write a single self-contained Python 3 script (stdlib only) that answers a " +
           `quantitative question about a competitive-landscape graph. The graph is at ${GRAPH_PATH} ` +
-          'as JSON: {"nodes": [{"id", "label", "name", ...properties}], "links": [{"source", "target", "type", "props"}]}. ' +
-          `Node labels present: ${labels.join(", ")}. Relationship types present: ${relTypes.join(", ")}. ` +
-          "Properties can be missing — guard every access. The script must print a short human-readable " +
-          "answer (a few lines of names and numbers, no JSON dump) and nothing else. " +
+          'as JSON: {"nodes": [...], "links": [{"source", "target", "type", "props"}]}. ' +
+          "Every node is a FLAT object — all properties sit directly on the node, no nested " +
+          '"properties" object. The exact property keys present per node label:\n' +
+          `${keysByLabel(graph)}\n` +
+          `Relationship types present: ${relTypes.join(", ")}. ` +
+          "Properties can still be missing on individual nodes — guard every access. " +
+          "The script must print a short human-readable answer (a few lines of names and " +
+          "numbers, no JSON dump) and nothing else. " +
           "Respond with ONLY the Python code. No markdown, no explanation.",
       },
       { role: "user", content: question },
