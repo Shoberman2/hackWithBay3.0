@@ -10,6 +10,8 @@
     { "table_name": "graph_questions", "user_column": "user_id" },
     { "table_name": "report_artifacts", "user_column": "user_id" },
     { "table_name": "source_artifacts", "user_column": "user_id" },
-    { "table_name": "pipeline_events", "user_column": "user_id" }
+    { "table_name": "pipeline_events", "user_column": "user_id" },
+    { "table_name": "industry_update_subscriptions", "user_column": "user_id" },
+    { "table_name": "industry_update_items", "user_column": "user_id" }
   ]
 }

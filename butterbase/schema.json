@@ -142,6 +142,36 @@
           "metadata": { "type": "jsonb", "default": "'{}'::jsonb" },
           "created_at": { "type": "timestamptz", "default": "now()" }
         }
+      },
+      "industry_update_subscriptions": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "workspace_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "scan_id": { "type": "uuid" },
+          "topic": { "type": "text", "nullable": false },
+          "cadence": { "type": "text", "nullable": false, "default": "'weekly'" },
+          "channel": { "type": "text", "nullable": false, "default": "'in_app'" },
+          "delivery_email": { "type": "text" },
+          "enabled": { "type": "boolean", "nullable": false, "default": "true" },
+          "last_delivered_at": { "type": "timestamptz" },
+          "next_run_at": { "type": "timestamptz" },
+          "created_at": { "type": "timestamptz", "default": "now()" },
+          "updated_at": { "type": "timestamptz", "default": "now()" }
+        }
+      },
+      "industry_update_items": {
+        "columns": {
+          "id": { "type": "uuid", "primaryKey": true, "default": "gen_random_uuid()" },
+          "subscription_id": { "type": "uuid", "nullable": false },
+          "user_id": { "type": "uuid", "nullable": false },
+          "title": { "type": "text", "nullable": false },
+          "summary": { "type": "text", "nullable": false },
+          "source_url": { "type": "text" },
+          "signal": { "type": "text" },
+          "read_at": { "type": "timestamptz" },
+          "created_at": { "type": "timestamptz", "default": "now()" }
+        }
       }
     }
   }

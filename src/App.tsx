@@ -3,8 +3,10 @@ import type { User } from '@butterbase/sdk'
 import {
   Archive,
   BadgeCheck,
+  Bell,
   BrainCircuit,
   Building2,
+  CheckCircle2,
   CircleDot,
   Cloud,
   Database,
@@ -17,6 +19,7 @@ import {
   Lightbulb,
   LogIn,
   LogOut,
+  Mail,
   Network,
   Play,
   RadioTower,
@@ -35,11 +38,14 @@ import {
   butterbaseFeatures,
   getCurrentUser,
   handleOAuthRedirect,
+  saveIndustryUpdatePreference,
   isButterbaseConfigured,
   saveScanSnapshot,
   signInWithGoogle,
   signOutOfButterbase,
+  type IndustryUpdateResult,
   type SavedScanResult,
+  type UpdateCadence,
 } from './lib/butterbase'
 import {
   buildMarketGraph,
@@ -66,6 +72,7 @@ const FEATURE_ICONS: Record<string, LucideIcon> = {
   'Google OAuth': KeyRound,
   'RLS Data API': ShieldCheck,
   Realtime: RadioTower,
+  'Industry Updates': Bell,
   Storage: Archive,
   'Native RAG': BrainCircuit,
   Functions: Cloud,
@@ -97,6 +104,12 @@ const modeOptions: Array<{ value: ScanMode; label: string }> = [
 const depthOptions: Array<{ value: ScanDepth; label: string }> = [
   { value: 'fast', label: 'Fast' },
   { value: 'deep', label: 'Deep' },
+]
+
+const cadenceOptions: Array<{ value: UpdateCadence; label: string }> = [
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'major', label: 'Major' },
 ]
 
 const shortLabel = (label: string) => {
@@ -204,6 +217,12 @@ function App() {
   const [isSaving, setIsSaving] = useState(false)
   const [lastSavedScan, setLastSavedScan] = useState<SavedScanResult | null>(null)
   const [saveMessage, setSaveMessage] = useState('Save the graph to Butterbase after sign-in.')
+  const [updatesEnabled, setUpdatesEnabled] = useState(false)
+  const [updatesCadence, setUpdatesCadence] = useState<UpdateCadence>('weekly')
+  const [updatesEmail, setUpdatesEmail] = useState('')
+  const [isSavingUpdates, setIsSavingUpdates] = useState(false)
+  const [updatesMessage, setUpdatesMessage] = useState('Sign in to receive updates for this industry.')
+  const [industryUpdates, setIndustryUpdates] = useState<IndustryUpdateResult | null>(null)
 
   const graph = useMemo(
     () => buildMarketGraph(activePrompt, mode, depth, scanNumber),
@@ -218,6 +237,8 @@ function App() {
 
   const selectedNode =
     graph.nodes.find((node) => node.id === selectedNodeId) ?? graph.nodes.find((node) => node.id === 'idea')
+
+  const updateTopic = activePrompt.trim() || DEFAULT_PROMPT
 
   useEffect(() => {
     let isMounted = true
@@ -256,10 +277,20 @@ function App() {
     }
   }, [])
 
+  useEffect(() => {
+    if (authUser?.email && !updatesEmail) {
+      setUpdatesEmail(authUser.email)
+      setUpdatesMessage(`Ready to receive updates at ${authUser.email}.`)
+    }
+  }, [authUser, updatesEmail])
+
   const runScan = () => {
     setIsScanning(true)
     setLastSavedScan(null)
+    setIndustryUpdates(null)
+    setUpdatesEnabled(false)
     setSaveMessage('New graph generated locally. Save it to Butterbase when ready.')
+    setUpdatesMessage('New graph generated locally. Opt in to receive updates for it.')
 
     window.setTimeout(() => {
       setActivePrompt(prompt)
@@ -288,8 +319,11 @@ function App() {
       await signOutOfButterbase()
       setAuthUser(null)
       setLastSavedScan(null)
+      setIndustryUpdates(null)
+      setUpdatesEnabled(false)
       setAuthMessage('Signed out of Butterbase.')
       setSaveMessage('Sign back in with Google to save private scans.')
+      setUpdatesMessage('Sign back in with Google to receive industry updates.')
     } catch (error) {
       setAuthMessage(error instanceof Error ? error.message : 'Could not sign out.')
     } finally {
@@ -317,6 +351,36 @@ function App() {
     } finally {
       setIsSaving(false)
     }
+  }
+
+  const saveIndustryUpdates = async (enabled = updatesEnabled) => {
+    setIsSavingUpdates(true)
+    setUpdatesMessage(enabled ? `Saving updates for ${updateTopic}.` : `Pausing updates for ${updateTopic}.`)
+
+    try {
+      const result = await saveIndustryUpdatePreference({
+        topic: updateTopic,
+        cadence: updatesCadence,
+        deliveryEmail: updatesEmail,
+        enabled,
+        graph,
+        scanId: lastSavedScan?.scanId,
+      })
+
+      setIndustryUpdates(result)
+      setUpdatesEnabled(result.enabled)
+      setUpdatesMessage(result.message)
+    } catch (error) {
+      setUpdatesEnabled(!enabled)
+      setUpdatesMessage(error instanceof Error ? error.message : 'Could not save industry update preference.')
+    } finally {
+      setIsSavingUpdates(false)
+    }
+  }
+
+  const toggleIndustryUpdates = (enabled: boolean) => {
+    setUpdatesEnabled(enabled)
+    void saveIndustryUpdates(enabled)
   }
 
   return (
@@ -443,6 +507,69 @@ function App() {
             ) : null}
           </div>
 
+          <div className="updates-card">
+            <div className="save-card-header">
+              <div>
+                <strong>Industry Updates</strong>
+                <span>{updatesMessage}</span>
+              </div>
+              <Bell size={18} />
+            </div>
+
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={updatesEnabled}
+                onChange={(event) => toggleIndustryUpdates(event.target.checked)}
+                disabled={!authUser || isSavingUpdates || !isButterbaseConfigured}
+              />
+              <span>
+                <strong>Receive updates for {updateTopic}</strong>
+                <small>Private in-app digest, email preference saved for later delivery.</small>
+              </span>
+            </label>
+
+            <label className="field-label compact-label" htmlFor="updates-email">
+              Delivery email
+            </label>
+            <div className="input-with-icon">
+              <Mail size={16} />
+              <input
+                id="updates-email"
+                type="email"
+                value={updatesEmail}
+                onChange={(event) => setUpdatesEmail(event.target.value)}
+                placeholder="founder@example.com"
+                disabled={!authUser || isSavingUpdates}
+              />
+            </div>
+
+            <span className="field-label compact-label">Cadence</span>
+            <div className="segmented-control compact-control" role="group" aria-label="Industry update cadence">
+              {cadenceOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className={updatesCadence === option.value ? 'is-active' : ''}
+                  onClick={() => setUpdatesCadence(option.value)}
+                  disabled={isSavingUpdates}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="secondary-button full-width"
+              onClick={() => saveIndustryUpdates(updatesEnabled)}
+              disabled={!authUser || isSavingUpdates || !isButterbaseConfigured}
+            >
+              <CheckCircle2 size={16} />
+              {isSavingUpdates ? 'Saving' : 'Save update preference'}
+            </button>
+          </div>
+
           <section className="butterbase-stack" aria-label="Butterbase feature coverage">
             <div className="mini-heading">
               <KeyRound size={16} />
@@ -567,6 +694,37 @@ function App() {
               </p>
               {lastSavedScan?.functionPlan?.length ? <span>{lastSavedScan.functionPlan[0]}</span> : null}
             </article>
+          </section>
+
+          <section className="side-section">
+            <h3>Updates Inbox</h3>
+            <div className="update-inbox">
+              {industryUpdates?.previewItems.length ? (
+                industryUpdates.previewItems.map((item) => (
+                  <article key={`${item.title}-${item.signal}`} className="update-item">
+                    <div>
+                      <Bell size={16} />
+                      <strong>{item.title}</strong>
+                    </div>
+                    <p>{item.summary}</p>
+                    <span>{item.signal}</span>
+                  </article>
+                ))
+              ) : (
+                <article className="update-item">
+                  <div>
+                    <Bell size={16} />
+                    <strong>{updatesEnabled ? 'Waiting for first signal' : 'Not subscribed yet'}</strong>
+                  </div>
+                  <p>
+                    {updatesEnabled
+                      ? `Rivalry will surface ${updatesCadence} changes for ${updateTopic}.`
+                      : 'Opt in from the scan panel to receive source-backed industry changes.'}
+                  </p>
+                  <span>{updatesCadence} cadence</span>
+                </article>
+              )}
+            </div>
           </section>
 
           <section className="side-section">

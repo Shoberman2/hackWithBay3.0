@@ -33,6 +33,7 @@ This takes days, is instantly stale, and the flat format hides the most importan
 3. **Live graph construction.** The ingestion pipeline kicks off. The graph populates in front of the user as entities are discovered and connected: companies appear, then founder nodes attach, then investor nodes, then feature and launch nodes. Watching the landscape assemble itself is the product moment.
 4. **Exploration and insight.** The user can click any node to expand it, or ask the agent natural-language questions that get answered via graph traversal: "which of these companies share investors," "who pivoted into this space from something else," "what feature does everyone have that I should treat as table stakes."
 5. **Report.** A free source-backed landscape memo is generated from the graph: competitive clusters, white space analysis, founder pattern analysis, and a positioning recommendation.
+6. **Industry updates.** The founder can opt in to receive private in-app updates for the saved market, with an email preference stored for future delivery.
 
 ### What makes it graph-native, not a database with extra steps
 
@@ -103,6 +104,7 @@ Built locally in the RocketRide VS Code extension and designed to run as a remot
 - **Database:** user profiles, saved sessions, onboarding answers, graph Q&A, source artifacts, report drafts, and realtime pipeline events.
 - **Row-level security:** every saved scan table is isolated by `user_id`.
 - **Realtime:** graph and pipeline rows are configured for live updates as the ingestion flow writes new data.
+- **Industry updates:** opt-in subscriptions and update inbox items are stored privately, with a scheduled function that can generate fresh in-app digest rows.
 - **Storage:** source-backed evidence bundles are saved as private JSON artifacts.
 - **RAG:** compact source memos are ingested so the agent can answer follow-up questions from saved evidence.
 - **Functions:** a free brief function generates next questions and report-prep hints for a saved scan.
@@ -191,7 +193,7 @@ The frontend is wired through [src/lib/butterbase.ts](/Users/shoberman/charityCh
 npm run setup:butterbase
 ```
 
-The setup command dry-runs and applies the schema, enables RLS, configures realtime for the user-owned tables, restricts storage to private artifacts, deploys the free brief function, and optionally configures Google OAuth when `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are present. All core features are free; there is no checkout, billing flow, or paid report gate.
+The setup command dry-runs and applies the schema, enables RLS, configures realtime for the user-owned tables, restricts storage to private artifacts, deploys the free brief and industry-update functions, and optionally configures Google OAuth when `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` are present. All core features are free; there is no checkout, billing flow, or paid report gate.
 
 ### Neo4j
 

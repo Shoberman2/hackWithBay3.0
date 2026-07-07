@@ -5,7 +5,7 @@ Use this folder after creating the Butterbase app in the dashboard.
 1. Create an app named `rivalry`.
 2. Save the returned app id and API URL in `.env.local`.
 3. Run `npm run setup:butterbase` to dry-run and apply `schema.json`.
-4. The setup command enables RLS, configures realtime, locks storage to private files, sets authenticated access mode, and deploys the free brief function.
+4. The setup command enables RLS, configures realtime, locks storage to private files, sets authenticated access mode, and deploys the free brief and industry-update functions.
 5. To enable Google sign-in, add a free Google OAuth client id and secret to `.env.local`, then rerun `npm run setup:butterbase`.
 
 Required local environment:

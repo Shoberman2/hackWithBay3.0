@@ -166,6 +166,7 @@ textarea {
 }
 
 textarea:focus,
+input:focus,
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid #2f6f68;
@@ -266,12 +267,18 @@ button:disabled {
 }
 
 .save-card,
+.updates-card,
 .butterbase-stack {
   margin-top: 14px;
   border: 1px solid #e1e5dd;
   border-radius: 8px;
   padding: 10px;
   background: #fbfcf8;
+}
+
+.updates-card {
+  display: grid;
+  gap: 10px;
 }
 
 .save-card-header {
@@ -324,6 +331,76 @@ button:disabled {
   color: #81572a;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.toggle-row {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 9px;
+  align-items: start;
+  border: 1px solid #e1e5dd;
+  border-radius: 8px;
+  padding: 9px;
+  background: #ffffff;
+}
+
+.toggle-row input {
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: #245e58;
+}
+
+.toggle-row span,
+.toggle-row strong,
+.toggle-row small {
+  display: block;
+}
+
+.toggle-row strong {
+  color: #1d211f;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.toggle-row small {
+  margin-top: 3px;
+  color: #657168;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.compact-label {
+  margin: 0 0 -3px;
+}
+
+.compact-control {
+  margin-bottom: 2px;
+}
+
+.input-with-icon {
+  min-height: 38px;
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfd7ce;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+}
+
+.input-with-icon input {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #1d211f;
+  font: inherit;
+  font-size: 13px;
+}
+
+.input-with-icon input:focus {
+  outline: 0;
 }
 
 .mini-heading {
@@ -510,7 +587,8 @@ button:disabled {
 .metric-card,
 .activity-item,
 .opportunity-item,
-.report-item {
+.report-item,
+.update-item {
   border: 1px solid #e1e5dd;
   border-radius: 8px;
   background: #fbfcf8;
@@ -594,14 +672,16 @@ button:disabled {
 
 .activity-list,
 .opportunity-list,
-.source-list {
+.source-list,
+.update-inbox {
   display: grid;
   gap: 8px;
 }
 
 .activity-item,
 .opportunity-item,
-.report-item {
+.report-item,
+.update-item {
   padding: 10px;
 }
 
@@ -611,7 +691,8 @@ button:disabled {
   gap: 10px;
 }
 
-.report-item div {
+.report-item div,
+.update-item div {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -619,7 +700,8 @@ button:disabled {
 
 .activity-item strong,
 .opportunity-item strong,
-.report-item strong {
+.report-item strong,
+.update-item strong {
   color: #1d211f;
   font-size: 14px;
 }
@@ -628,6 +710,7 @@ button:disabled {
 .activity-item small,
 .opportunity-item span,
 .report-item span,
+.update-item span,
 .source-list small {
   color: #68746d;
   font-size: 12px;
@@ -636,14 +719,16 @@ button:disabled {
 
 .activity-item p,
 .opportunity-item p,
-.report-item p {
+.report-item p,
+.update-item p {
   margin: 7px 0;
   color: #526057;
   font-size: 13px;
 }
 
 .opportunity-item span,
-.report-item span {
+.report-item span,
+.update-item span {
   display: block;
 }
 

@@ -2,6 +2,7 @@ import { createClient, type User } from '@butterbase/sdk'
 import type { MarketGraph, ScanDepth, ScanMode } from './marketGraph'
 
 type ButterbaseFeatureTone = 'ready' | 'hooked' | 'free' | 'off'
+export type UpdateCadence = 'daily' | 'weekly' | 'major'
 
 export interface ButterbaseFeature {
   label: string
@@ -26,10 +27,48 @@ export interface SavedScanResult {
   warnings: string[]
 }
 
+export interface IndustryUpdateInput {
+  topic: string
+  cadence: UpdateCadence
+  deliveryEmail?: string
+  enabled: boolean
+  graph: MarketGraph
+  scanId?: string
+}
+
+export interface IndustryUpdateItem {
+  title: string
+  summary: string
+  sourceUrl?: string
+  signal?: string
+}
+
+export interface IndustryUpdateResult {
+  subscriptionId: string
+  enabled: boolean
+  cadence: UpdateCadence
+  deliveryEmail?: string
+  previewItems: IndustryUpdateItem[]
+  functionPlan?: string[]
+  message: string
+}
+
 interface WorkspaceRow {
   id: string
   user_id: string
   name: string
+}
+
+interface IndustryUpdateSubscriptionRow {
+  id: string
+  workspace_id: string
+  user_id: string
+  scan_id?: string | null
+  topic: string
+  cadence: UpdateCadence
+  channel: string
+  delivery_email?: string | null
+  enabled: boolean
 }
 
 interface ButterbaseErrorLike {
@@ -73,6 +112,11 @@ export const butterbaseFeatures: ButterbaseFeature[] = [
     tone: isButterbaseConfigured ? 'ready' : 'hooked',
   },
   {
+    label: 'Industry Updates',
+    detail: 'Opt-in digests track changes for saved markets.',
+    tone: 'ready',
+  },
+  {
     label: 'Storage',
     detail: 'Evidence bundles upload as private JSON artifacts.',
     tone: 'hooked',
@@ -101,6 +145,7 @@ export const butterbaseFeatures: ButterbaseFeature[] = [
 
 const RAG_COLLECTION = 'rivalry-market-evidence'
 const FUNCTION_NAME = 'rivalry-free-brief'
+const INDUSTRY_UPDATES_FUNCTION_NAME = 'rivalry-industry-updates'
 
 const isOAuthCallbackUrl = () => {
   if (typeof window === 'undefined') return false
@@ -322,6 +367,78 @@ const maybeInvokeFreeBriefFunction = async (input: ScanSaveInput, scanId: string
   }
 }
 
+const nextRunForCadence = (cadence: UpdateCadence) => {
+  const days = cadence === 'daily' ? 1 : cadence === 'weekly' ? 7 : 14
+  const nextRun = new Date()
+  nextRun.setDate(nextRun.getDate() + days)
+  return nextRun.toISOString()
+}
+
+const createIndustryPreviewItems = (
+  input: IndustryUpdateInput,
+  subscriptionId: string,
+  userId: string,
+): Array<Record<string, unknown>> => {
+  if (!input.enabled) return []
+
+  const source = input.graph.sources[0]
+  const opportunity = input.graph.opportunities[0]
+
+  return [
+    {
+      id: crypto.randomUUID(),
+      subscription_id: subscriptionId,
+      user_id: userId,
+      title: `${input.topic} watch started`,
+      summary: `Rivalry will collect source-backed changes for ${input.topic} and surface them in this updates feed.`,
+      source_url: source?.url ?? null,
+      signal: `${input.cadence} digest`,
+    },
+    {
+      id: crypto.randomUUID(),
+      subscription_id: subscriptionId,
+      user_id: userId,
+      title: opportunity ? `${opportunity.title} monitor` : 'White-space monitor',
+      summary: opportunity?.wedge ?? 'Track competitor movement, new sources, and white-space shifts.',
+      source_url: source?.url ?? null,
+      signal: 'Opportunity tracking',
+    },
+  ]
+}
+
+const maybeInvokeIndustryUpdatesFunction = async (
+  input: IndustryUpdateInput,
+  subscriptionId: string,
+  warnings: string[],
+) => {
+  const client = requireButterbase()
+
+  try {
+    const { data, error } = await client.functions.invoke<{ planned_signals?: string[] }>(
+      INDUSTRY_UPDATES_FUNCTION_NAME,
+      {
+        method: 'POST',
+        body: {
+          subscription_id: subscriptionId,
+          topic: input.topic,
+          cadence: input.cadence,
+          enabled: input.enabled,
+        },
+      },
+    )
+
+    if (error) {
+      warnings.push(`Updates function skipped: ${errorMessage(error)}`)
+      return undefined
+    }
+
+    return data?.planned_signals
+  } catch (error) {
+    warnings.push(`Updates function skipped: ${errorMessage(error)}`)
+    return undefined
+  }
+}
+
 export const saveScanSnapshot = async (input: ScanSaveInput): Promise<SavedScanResult> => {
   const client = requireButterbase()
   const userResponse = await client.auth.getUser()
@@ -516,5 +633,99 @@ export const saveScanSnapshot = async (input: ScanSaveInput): Promise<SavedScanR
     ragDocumentId,
     functionPlan,
     warnings,
+  }
+}
+
+export const saveIndustryUpdatePreference = async (
+  input: IndustryUpdateInput,
+): Promise<IndustryUpdateResult> => {
+  const client = requireButterbase()
+  const userResponse = await client.auth.getUser()
+  if (userResponse.error || !userResponse.data) {
+    throw new Error('Sign in with Google before enabling industry updates.')
+  }
+
+  const user = userResponse.data
+  const workspace = await getOrCreateWorkspace(user)
+  const topic = input.topic.trim()
+  if (!topic) throw new Error('Add an industry or idea before enabling updates.')
+
+  const existing = await client
+    .from<IndustryUpdateSubscriptionRow>('industry_update_subscriptions')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('topic', topic)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (existing.error) throw new Error(errorMessage(existing.error))
+
+  const existingSubscription = firstRow<IndustryUpdateSubscriptionRow>(existing.data)
+  const subscriptionId = existingSubscription?.id ?? crypto.randomUUID()
+  const payload = {
+    workspace_id: workspace.id,
+    user_id: user.id,
+    scan_id: input.scanId ?? existingSubscription?.scan_id ?? null,
+    topic,
+    cadence: input.cadence,
+    channel: 'in_app',
+    delivery_email: input.deliveryEmail?.trim() || user.email,
+    enabled: input.enabled,
+    next_run_at: input.enabled ? nextRunForCadence(input.cadence) : null,
+    updated_at: new Date().toISOString(),
+  }
+
+  if (existingSubscription) {
+    const updated = await client
+      .from('industry_update_subscriptions')
+      .update(payload)
+      .eq('id', existingSubscription.id)
+    if (updated.error) throw new Error(errorMessage(updated.error))
+  } else {
+    const created = await client
+      .from('industry_update_subscriptions')
+      .insert({
+        id: subscriptionId,
+        ...payload,
+      })
+    if (created.error) throw new Error(errorMessage(created.error))
+  }
+
+  const warnings: string[] = []
+  const functionPlan = await maybeInvokeIndustryUpdatesFunction(
+    {
+      ...input,
+      topic,
+    },
+    subscriptionId,
+    warnings,
+  )
+  const previewRows = createIndustryPreviewItems(
+    {
+      ...input,
+      topic,
+    },
+    subscriptionId,
+    user.id,
+  )
+  await insertRows('industry_update_items', previewRows)
+
+  const previewItems = previewRows.map((row) => ({
+    title: String(row.title),
+    summary: String(row.summary),
+    sourceUrl: typeof row.source_url === 'string' ? row.source_url : undefined,
+    signal: typeof row.signal === 'string' ? row.signal : undefined,
+  }))
+
+  return {
+    subscriptionId,
+    enabled: input.enabled,
+    cadence: input.cadence,
+    deliveryEmail: payload.delivery_email,
+    previewItems,
+    functionPlan,
+    message: input.enabled
+      ? `Industry updates are on for ${topic}.`
+      : `Industry updates are paused for ${topic}.`,
   }
 }

@@ -31,6 +31,7 @@ The output is not a generic market report. It is a source-backed graph that expl
 3. **Live graph construction.** Rivalry discovers companies, people, investors, features, launch events, and sources, then links them into Neo4j.
 4. **Graph-native exploration.** The founder clicks nodes or asks natural-language questions that resolve to traversals and graph algorithms.
 5. **Source-backed report.** A free report draft summarizes competitive clusters, white space, founder patterns, and positioning recommendations.
+6. **Industry updates.** The founder opts in to receive private updates when new source-backed signals appear in the market.
 
 ## Why Graph-Native
 
@@ -61,12 +62,13 @@ The MVP should prove one polished end-to-end path:
 - Clickable graph nodes and evidence trail.
 - Two graph-native questions: shared investors and white space.
 - Free landscape report draft backed by Butterbase scans, source artifacts, and RAG evidence.
+- Opt-in industry update subscription and in-app update inbox.
 
 ## Technology Roles
 
 - **Neo4j:** Stores and queries the competitive landscape graph. Traversals, centrality, and community detection are the core intelligence.
 - **RocketRide Cloud:** Runs discovery, extraction, deduplication, graph writes, and insight generation as a deployed agent pipeline.
-- **Butterbase:** Handles Google auth, saved sessions, onboarding answers, graph Q&A, realtime events, source artifacts, RAG evidence, functions, and model gateway calls. The flow has no paywall.
+- **Butterbase:** Handles Google auth, saved sessions, onboarding answers, graph Q&A, realtime events, industry update subscriptions, source artifacts, RAG evidence, functions, and model gateway calls. The flow has no paywall.
 - **Cognee, optional:** Remembers founder context and prior scans across sessions.
 
 ## Success Criteria

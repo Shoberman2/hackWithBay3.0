@@ -6,6 +6,7 @@ import { createClient } from '@butterbase/sdk'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '..')
 const FUNCTION_NAME = 'rivalry-free-brief'
+const INDUSTRY_UPDATES_FUNCTION_NAME = 'rivalry-industry-updates'
 
 const requiredEnv = ['VITE_BUTTERBASE_APP_ID', 'VITE_BUTTERBASE_API_URL', 'BUTTERBASE_API_KEY']
 const missingEnv = requiredEnv.filter((key) => !process.env[key])
@@ -163,6 +164,86 @@ if (functionDeploy.error) {
   console.log(`Free brief function skipped: ${responseMessage(functionDeploy.error)}`)
 } else {
   console.log(`Function deployed: ${FUNCTION_NAME}`)
+}
+
+const industryUpdatesFunctionCode = `
+const cadenceDays = (cadence) => cadence === 'daily' ? 1 : cadence === 'weekly' ? 7 : 14;
+
+export default async function handler(req, ctx) {
+  const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+
+  if (ctx.user && body.subscription_id) {
+    return new Response(JSON.stringify({
+      queued: true,
+      subscription_id: body.subscription_id,
+      planned_signals: [
+        'New competitor launches',
+        'Founder and investor movement',
+        'Source-backed white-space shifts'
+      ]
+    }), {
+      headers: { 'content-type': 'application/json' }
+    });
+  }
+
+  const subscriptions = await ctx.db.query(
+    "SELECT id, user_id, topic, cadence FROM industry_update_subscriptions WHERE enabled = true AND (next_run_at IS NULL OR next_run_at <= now()) ORDER BY COALESCE(next_run_at, created_at) ASC LIMIT 50"
+  );
+
+  let created = 0;
+  for (const subscription of subscriptions.rows) {
+    const nextRun = new Date();
+    nextRun.setDate(nextRun.getDate() + cadenceDays(subscription.cadence));
+
+    await ctx.db.query(
+      "INSERT INTO industry_update_items (id, subscription_id, user_id, title, summary, signal) VALUES ($1, $2, $3, $4, $5, $6)",
+      [
+        crypto.randomUUID(),
+        subscription.id,
+        subscription.user_id,
+        subscription.topic + ' industry update',
+        'Rivalry found a new source-backed market signal to review in your updates inbox.',
+        subscription.cadence + ' digest'
+      ]
+    );
+
+    await ctx.db.query(
+      "UPDATE industry_update_subscriptions SET last_delivered_at = now(), next_run_at = $1, updated_at = now() WHERE id = $2",
+      [nextRun.toISOString(), subscription.id]
+    );
+    created += 1;
+  }
+
+  return new Response(JSON.stringify({
+    created,
+    checked: subscriptions.rows.length
+  }), {
+    headers: { 'content-type': 'application/json' }
+  });
+}
+`
+
+console.log('Butterbase setup: deploying industry updates function')
+const industryUpdatesDeploy = await client.admin.functions.deploy({
+  name: INDUSTRY_UPDATES_FUNCTION_NAME,
+  code: industryUpdatesFunctionCode,
+  description: 'Creates free in-app industry update items for opted-in Rivalry subscriptions.',
+  timeoutMs: 30000,
+  memoryLimitMb: 128,
+  triggers: [
+    { type: 'http', config: { auth: 'required' } },
+    { type: 'cron', config: { schedule: '0 15 * * *', timezone: 'UTC' } },
+  ],
+  agent_tool: true,
+  agent_tool_description: 'Queue or generate in-app industry updates for Rivalry subscriptions.',
+  agent_tool_mode: 'read_only',
+  agent_tool_exposed_to: 'developer_only',
+})
+
+if (industryUpdatesDeploy.error) {
+  console.log(`Industry updates function skipped: ${responseMessage(industryUpdatesDeploy.error)}`)
+} else {
+  console.log(`Function deployed: ${INDUSTRY_UPDATES_FUNCTION_NAME}`)
 }
 
 console.log('Butterbase setup complete')

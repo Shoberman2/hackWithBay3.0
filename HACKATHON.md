@@ -13,6 +13,7 @@ All judged features must be free to use:
 - Evidence bundles
 - Source-backed report drafts
 - Butterbase realtime events
+- Industry update subscriptions and in-app update items
 - Storage and RAG evidence hooks
 
 Do not add checkout, billing, paid tiers, report gates, or usage paywalls.
@@ -45,6 +46,7 @@ Rivalry should use as many free Butterbase features as possible:
 - User-owned Data API tables in [butterbase/schema.json](/Users/shoberman/charityChecker/butterbase/schema.json)
 - RLS policies in [butterbase/rls.json](/Users/shoberman/charityChecker/butterbase/rls.json)
 - Realtime configuration through `npm run setup:butterbase`
+- Opt-in industry update subscriptions and scheduled in-app digest function
 - Private storage uploads for evidence bundles
 - Native RAG ingestion for source memos
 - Free brief serverless function
@@ -93,5 +95,6 @@ npm run dev
 4. Click nodes to show evidence and relationship signals.
 5. Sign in with Google once OAuth credentials are configured.
 6. Save the private scan to Butterbase.
-7. Show the saved free report draft, source artifact, RAG memo, and realtime event rows.
-8. Explain the next step: RocketRide streams fresh discovery events into Neo4j and Butterbase.
+7. Opt in to industry updates and show the in-app updates inbox.
+8. Show the saved free report draft, source artifact, RAG memo, and realtime event rows.
+9. Explain the next step: RocketRide streams fresh discovery events into Neo4j and Butterbase.
