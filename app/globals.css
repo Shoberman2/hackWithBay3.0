@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  /* Surfaces */
+  --canvas: #ffffff;
+  --surface: #fbfbfa;
+
+  /* Ink */
+  --ink: #111111;
+  --ink-2: #787774;
+
+  /* Structure */
+  --border: #eaeaea;
+
+  /* Accent (use sparsely) */
+  --accent: #1e6b4f;
+
+  /* Node-type colors (graph only, desaturated) */
+  --node-company: #4f6d9e;
+  --node-founder: #3e8e68;
+  --node-investor: #b8863b;
+  --node-feature: #6b7280;
+  --node-launch: #a85d6e;
+  --node-segment: #4e8e96;
+
+  /* Badge washes */
+  --wash-green: #edf3ec;
+  --wash-blue: #e1f3fe;
+  --wash-yellow: #fbf3db;
+  --wash-red: #fdebec;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-node-company: var(--node-company);
+  --color-node-founder: var(--node-founder);
+  --color-node-investor: var(--node-investor);
+  --color-node-feature: var(--node-feature);
+  --color-node-launch: var(--node-launch);
+  --color-node-segment: var(--node-segment);
+  --color-wash-green: var(--wash-green);
+  --color-wash-blue: var(--wash-blue);
+  --color-wash-yellow: var(--wash-yellow);
+  --color-wash-red: var(--wash-red);
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Motion: fade-in + rise, staggered via --index */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  opacity: 0;
+  animation: fade-up 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation-delay: calc(var(--index, 0) * 80ms);
+}
+
+/* Skeleton shimmer for async views */
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface) 25%,
+    var(--border) 50%,
+    var(--surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s linear infinite;
+}

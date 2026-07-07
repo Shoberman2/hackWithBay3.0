@@ -1,0 +1,51 @@
+{
+  "pipeline": {
+    "description": "Rivalry entity extraction: webhook JSON in -> LLM via the Butterbase OpenAI-compatible gateway -> ExtractedBatch JSON out. See pipelines/README.md for node-by-node documentation.",
+    "version": 1,
+    "project_id": "rivalry-extract",
+    "source": "webhook_1",
+    "components": [
+      {
+        "id": "webhook_1",
+        "provider": "webhook",
+        "name": "Extraction input",
+        "description": "Source node. Receives application/json payloads of shape { idea: string, tags: string[], raw_documents: [{ url, source_type, title, text, date? }] } sent via the rocketride SDK (client.send with mimetype application/json).",
+        "config": {
+          "mode": "sync",
+          "mimetypes": ["application/json"]
+        },
+        "ui": { "position": { "x": 80, "y": 200 } }
+      },
+      {
+        "id": "llm_extract",
+        "provider": "llm",
+        "name": "Entity extraction (Butterbase gateway)",
+        "description": "LLM node pointed at the Butterbase OpenAI-compatible base URL. The API key is injected at use() time as a ROCKETRIDE_* environment override; no raw provider keys anywhere.",
+        "config": {
+          "provider": "openai",
+          "base_url": "https://api.butterbase.ai/v1",
+          "api_key": "${ROCKETRIDE_BUTTERBASE_AI_KEY}",
+          "model": "anthropic/claude-3.5-sonnet",
+          "temperature": 0,
+          "max_tokens": 8192,
+          "response_format": "json_object",
+          "system_prompt": "You are the entity-extraction stage of a competitive-landscape pipeline. Input: JSON with { idea, tags, raw_documents: [{ url, source_type, title, text, date? }] }. Output: ONLY a single JSON object matching the ExtractedBatch schema. No markdown, no prose, no code fences.\nSchema (all arrays required, empty when nothing found): {\"companies\":[{\"name\",\"url?\",\"description?\",\"stage?\",\"founded_year?\",\"hq?\",\"status?(active|dead|acquired)\",\"source_url\"}],\"founders\":[{\"name\",\"linkedin_url?\",\"background_summary?\",\"source_url\"}],\"investors\":[{\"name\",\"type?(VC|angel|accelerator)\",\"notable?\",\"source_url\"}],\"features\":[{\"name\",\"category?\",\"description?\",\"source_url\"}],\"launches\":[{\"event_id\",\"title\",\"date?\",\"source?\",\"url?\",\"source_url\"}],\"segments\":[{\"name\",\"source_url\"}],\"funding_rounds\":[{\"round_id\",\"round_type\",\"amount_usd?\",\"announced_date?\",\"source_url\"}],\"snapshots\":[{\"snapshot_id\",\"url\",\"captured_at\",\"positioning_summary?\",\"digest?\",\"source_url\"}],\"posts\":[{\"title\",\"url\",\"platform(HN|PH|blog|GitHub)\",\"posted_at?\",\"source_url\"}],\"moat_claims\":[{\"claim_id\",\"type(network-effects|data|distribution|brand|switching-costs)\",\"summary\",\"confidence\",\"source_url\"}],\"traction_signals\":[{\"signal_id\",\"metric(users|stars|votes|app_ratings|web_rank)\",\"value\",\"observed_at\",\"source_url\"}],\"relationships\":[{\"from\",\"to\",\"type\",\"props?\",\"source_url\"}]}\nRelationship types (from -> to, natural keys of entities in THIS batch): COMPETES_IN Company->Segment, FOUNDED Founder->Company, WORKED_AT Founder->Company, INVESTED_IN Investor->Company, HAS_FEATURE Company->Feature, SHIPPED Company->LaunchEvent(event_id), SHIPPED_AFTER LaunchEvent->LaunchEvent, TARGETS Company->Segment, RELEVANT_TO Company->Idea, RAISED Company->FundingRound(round_id), PARTICIPATED_IN Investor->FundingRound, HAD_SNAPSHOT Company->WebsiteSnapshot(snapshot_id), NEXT_SNAPSHOT WebsiteSnapshot->WebsiteSnapshot, POSTED Founder->Post(url), ABOUT Post->Company, CLAIMS_MOAT Company->MoatClaim(claim_id), HAS_TRACTION Company->TractionSignal(signal_id).\nHard rules: 1. Every entity MUST carry source_url copied verbatim from the url of the input document it came from; never invent URLs. 2. Every relationship MUST carry props.confidence, a number 0-1 reflecting how directly the document supports it. 3. Unknown or unstated fields are null; NEVER guess values. 4. Composite ids: round_id=\"{company}|{round_type}|{announced_date}\"; snapshot_id=\"{domain}|{timestamp}\"; claim_id=\"{company}|{moat_type}\"; signal_id=\"{company}|{metric}|{observed_at}\"; event_id=\"{company}|{title}\". 5. For RELEVANT_TO, 'to' is the literal idea text from the input; props.relevance_score 0-1. 6. Only extract entities actually present in the documents; do not add companies from your own knowledge."
+        },
+        "input": [{ "lane": "data", "from": "webhook_1" }],
+        "ui": { "position": { "x": 420, "y": 200 } }
+      },
+      {
+        "id": "response_1",
+        "provider": "response",
+        "name": "ExtractedBatch JSON",
+        "description": "Returns the LLM's JSON text as the synchronous pipeline result delivered back over the SDK WebSocket send() call.",
+        "config": {
+          "format": "json",
+          "lanes": ["text"]
+        },
+        "input": [{ "lane": "text", "from": "llm_extract" }],
+        "ui": { "position": { "x": 760, "y": 200 } }
+      }
+    ]
+  }
+}
