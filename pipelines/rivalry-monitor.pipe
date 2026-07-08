@@ -1,6 +1,6 @@
 {
   "pipeline": {
-    "description": "Rivalry news monitor: raw platform documents in (fetched by the Daytona sandbox agent) -> LLM classification via the Butterbase OpenAI-compatible gateway -> NewsSignal JSON out. See pipelines/README.md for node-by-node documentation.",
+    "description": "Rivalry news monitor classification: webhook JSON in -> prompt -> LLM via Butterbase gateway -> NewsSignal JSON out (answers lane).",
     "version": 1,
     "project_id": "rivalry-monitor",
     "source": "webhook_1",
@@ -8,43 +8,88 @@
       {
         "id": "webhook_1",
         "provider": "webhook",
-        "name": "Monitor input",
-        "description": "Source node. Receives application/json payloads of shape { companies: string[], tags: string[], raw_documents: [{ url, source_type, title, text, date? }] } where raw_documents were gathered by the Daytona fetch agent from TechCrunch, Google News, and Hacker News.",
+        "name": "Input",
+        "description": "Source node. Receives the application/json payload sent via the rocketride SDK (client.send, mimetype application/json).",
         "config": {
-          "mode": "sync",
-          "mimetypes": ["application/json"]
+          "mode": "Source"
         },
-        "ui": { "position": { "x": 80, "y": 200 } }
+        "ui": {
+          "position": {
+            "x": 80,
+            "y": 200
+          }
+        }
       },
       {
-        "id": "llm_classify",
-        "provider": "llm",
-        "name": "News classification (Butterbase gateway)",
-        "description": "LLM node pointed at the Butterbase OpenAI-compatible base URL. The API key is injected at use() time as a ROCKETRIDE_* environment override; no raw provider keys anywhere.",
+        "id": "prompt_1",
+        "provider": "prompt",
+        "name": "Instructions",
+        "description": "Prepends the system instructions to the incoming JSON payload (the 'questions' lane) before the LLM.",
         "config": {
-          "provider": "openai",
-          "base_url": "https://api.butterbase.ai/v1",
-          "api_key": "${ROCKETRIDE_BUTTERBASE_AI_KEY}",
-          "model": "anthropic/claude-3.5-sonnet",
-          "temperature": 0,
-          "max_tokens": 4096,
-          "response_format": "json_object",
-          "system_prompt": "You are the classification stage of a competitive-landscape news monitor. Input: JSON with { companies: string[] (the watchlist), tags: string[] (the market), raw_documents: [{ url, source_type, title, text, date? }] } where documents were fetched from TechCrunch, Google News, and Hacker News. Output: ONLY a single JSON object {\"signals\":[{\"headline\":string,\"url\":string,\"date\":string|null,\"source\":string,\"kind\":\"funding\"|\"launch\"|\"acquisition\"|\"shutdown\"|\"product\"|\"market\"|\"other\",\"companies_mentioned\":string[],\"relevance\":number,\"summary\":string}]}. No markdown, no prose, no code fences.\nHard rules: 1. Only emit a signal for a document that concerns a watchlist company OR the market described by the tags; drop everything else silently. 2. url and date are copied verbatim from the input document; never invent URLs or dates. 3. relevance is 0-1: 1.0 = directly about a watchlist company, 0.5 = same market different company, below 0.3 = do not emit. 4. companies_mentioned contains only names actually present in the document text. 5. summary is one factual sentence grounded in the document text; no speculation. 6. kind reflects the document's primary event: funding rounds -> funding, product/feature releases -> launch/product, acquisitions -> acquisition, shutdowns/pivots -> shutdown, market/industry analysis -> market, anything else -> other. 7. Deduplicate: one signal per underlying story even when several documents cover it (keep the highest-relevance document's url)."
+          "instructions": [
+            "You are the classification stage of a competitive-landscape news monitor. Input: JSON with { companies: string[] (the watchlist), tags: string[] (the market), raw_documents: [{ url, source_type, title, text, date? }] } where documents were fetched from TechCrunch, Google News, and Hacker News. Output: ONLY a single JSON object {\"signals\":[{\"headline\":string,\"url\":string,\"date\":string|null,\"source\":string,\"kind\":\"funding\"|\"launch\"|\"acquisition\"|\"shutdown\"|\"product\"|\"market\"|\"other\",\"companies_mentioned\":string[],\"relevance\":number,\"summary\":string}]}. No markdown, no prose, no code fences.\nHard rules: 1. Only emit a signal for a document that concerns a watchlist company OR the market described by the tags; drop everything else silently. 2. url and date are copied verbatim from the input document; never invent URLs or dates. 3. relevance is 0-1: 1.0 = directly about a watchlist company, 0.5 = same market different company, below 0.3 = do not emit. 4. companies_mentioned contains only names actually present in the document text. 5. summary is one factual sentence grounded in the document text; no speculation. 6. kind reflects the document's primary event: funding rounds -> funding, product/feature releases -> launch/product, acquisitions -> acquisition, shutdowns/pivots -> shutdown, market/industry analysis -> market, anything else -> other. 7. Deduplicate: one signal per underlying story even when several documents cover it (keep the highest-relevance document's url)."
+          ]
         },
-        "input": [{ "lane": "data", "from": "webhook_1" }],
-        "ui": { "position": { "x": 420, "y": 200 } }
+        "input": [
+          {
+            "lane": "questions",
+            "from": "webhook_1"
+          }
+        ],
+        "ui": {
+          "position": {
+            "x": 360,
+            "y": 200
+          }
+        }
+      },
+      {
+        "id": "llm_1",
+        "provider": "llm_openai_api",
+        "name": "LLM (Butterbase gateway)",
+        "description": "OpenAI-compatible LLM node pointed at the Butterbase gateway. The API key is injected at use() time as ${ROCKETRIDE_BUTTERBASE_AI_KEY}; no raw provider keys in the file.",
+        "config": {
+          "profile": "custom",
+          "custom": {
+            "apikey": "${ROCKETRIDE_BUTTERBASE_AI_KEY}",
+            "base_url": "https://api.butterbase.ai/v1",
+            "model": "anthropic/claude-sonnet-4.5",
+            "modelTotalTokens": 8192
+          }
+        },
+        "input": [
+          {
+            "lane": "questions",
+            "from": "prompt_1"
+          }
+        ],
+        "ui": {
+          "position": {
+            "x": 640,
+            "y": 200
+          }
+        }
       },
       {
         "id": "response_1",
-        "provider": "response",
-        "name": "NewsSignal JSON",
-        "description": "Returns the LLM's JSON text as the synchronous pipeline result delivered back over the SDK WebSocket send() call.",
+        "provider": "response_answers",
+        "name": "JSON out",
+        "description": "Returns the LLM's answer text under the 'answers' key as the synchronous pipeline result.",
         "config": {
-          "format": "json",
-          "lanes": ["text"]
+          "laneName": "answers"
         },
-        "input": [{ "lane": "text", "from": "llm_classify" }],
-        "ui": { "position": { "x": 760, "y": 200 } }
+        "input": [
+          {
+            "lane": "answers",
+            "from": "llm_1"
+          }
+        ],
+        "ui": {
+          "position": {
+            "x": 920,
+            "y": 200
+          }
+        }
       }
     ]
   }

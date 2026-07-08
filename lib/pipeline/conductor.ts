@@ -22,10 +22,12 @@ import type {
   InsightCard,
   NodeLabel,
   PipelineEvent,
+  RawDoc,
   RelationshipType,
 } from "@/lib/types";
 import { linkKey } from "@/lib/types";
 import { runExtraction, usesRemoteExtraction, expandQuery } from "@/lib/rocketride";
+import { emptyBatch } from "@/lib/pipeline/extract";
 import { dedupeBatch, emptyExisting, absorbBatch } from "@/lib/pipeline/dedupe";
 import { writeEntities } from "@/lib/pipeline/write";
 import { fetchAllSources } from "@/lib/sources";
@@ -398,9 +400,25 @@ export async function* runPipeline(
   const allNodes = new Map<string, GraphNode>([[ideaNode.id, ideaNode]]);
   const allLinks = new Map<string, GraphLink>();
 
+  // Fire every batch's LLM extraction concurrently, then absorb+stream each
+  // as it resolves. The extraction calls are independent, so this collapses
+  // wall-clock time from sum-of-batches to slowest-single-batch. Dedupe and
+  // graph-write still happen one batch at a time (in completion order) so
+  // cross-batch dedup stays correct.
+  const slices: RawDoc[][] = [];
   for (let i = 0; i < docs.length; i += EXTRACTION_BATCH_SIZE) {
-    const slice = docs.slice(i, i + EXTRACTION_BATCH_SIZE);
-    const batch = await runExtraction(slice, idea, tags);
+    slices.push(docs.slice(i, i + EXTRACTION_BATCH_SIZE));
+  }
+  const pending = slices.map((slice) =>
+    runExtraction(slice, idea, tags).catch((err) => {
+      debug("batch extraction failed (continuing):", err);
+      return emptyBatch();
+    }),
+  );
+  let processed = 0;
+  for (const batchPromise of pending) {
+    const batch = await batchPromise;
+    processed++;
     const deduped = dedupeBatch(batch, existing);
     absorbBatch(existing, deduped);
 
@@ -421,7 +439,7 @@ export async function* runPipeline(
     yield {
       type: "status",
       stage: "extract",
-      message: `Processed ${Math.min(i + EXTRACTION_BATCH_SIZE, docs.length)} of ${docs.length} documents`,
+      message: `Processed ${processed * EXTRACTION_BATCH_SIZE >= docs.length ? docs.length : processed * EXTRACTION_BATCH_SIZE} of ${docs.length} documents`,
     };
   }
 

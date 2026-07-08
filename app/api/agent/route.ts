@@ -39,6 +39,8 @@ const bodySchema = z.discriminatedUnion("mode", [
     /** Onboarding UI wire shape: prior question/answer pairs. */
     answers: z.array(qaSchema).default([]),
     idea: z.string().optional(),
+    /** Optional longer free-text description; deepens tags + discovery. */
+    description: z.string().optional(),
   }),
   z.object({
     mode: z.literal("ask"),
@@ -97,8 +99,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       let history: ChatMessage[] = body.history;
       if (history.length === 0 && body.idea) {
         // Onboarding UI wire shape: rebuild the transcript from the idea
-        // plus question/answer pairs (first user message = the raw idea).
-        history = [{ role: "user", content: body.idea }];
+        // (plus any longer description) and the question/answer pairs. The
+        // description gives the interviewer far more to derive tags and
+        // discovery search terms from — the key to surfacing real rivals.
+        const seed = body.description
+          ? `${body.idea}\n\nMore detail: ${body.description}`
+          : body.idea;
+        history = [{ role: "user", content: seed }];
         for (const qa of body.answers) {
           history.push({ role: "assistant", content: qa.question });
           history.push({ role: "user", content: qa.answer });

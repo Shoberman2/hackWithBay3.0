@@ -16,6 +16,7 @@ const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 export default function OnboardingFlow() {
   const { user, loading, refresh } = useAuth();
   const [idea, setIdea] = useState("");
+  const [description, setDescription] = useState("");
   const [submitted, setSubmitted] = useState(false);
 
   const canSubmit = idea.trim().length > 2;
@@ -92,7 +93,7 @@ export default function OnboardingFlow() {
                   value={idea}
                   onChange={(e) => setIdea(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") submit();
+                    if (e.key === "Enter" && !e.shiftKey) submit();
                   }}
                   placeholder="Describe your idea in one line"
                   className="mt-3 w-full border-b border-transparent bg-transparent pb-2 text-2xl tracking-tight outline-none transition-colors placeholder:text-ink-2/60 focus:border-line"
@@ -104,8 +105,34 @@ export default function OnboardingFlow() {
               </div>
 
               <div
-                className="fade-up mt-10"
+                className="fade-up mt-8"
                 style={{ "--index": 3 } as React.CSSProperties}
+              >
+                <label
+                  htmlFor="description"
+                  className="block text-xs uppercase tracking-wide text-ink-2"
+                >
+                  More detail{" "}
+                  <span className="normal-case tracking-normal text-ink-2/70">
+                    — optional, but sharpens the competitor search
+                  </span>
+                </label>
+                <textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
+                  }}
+                  rows={4}
+                  placeholder="Who is it for, how does it work, what makes it different, and any competitors you already know. The more you say, the more real rivals we can pull."
+                  className="mt-3 w-full resize-y rounded-[6px] border border-line bg-transparent p-3 text-[15px] leading-relaxed outline-none transition-colors placeholder:text-ink-2/60 focus:border-ink/40"
+                />
+              </div>
+
+              <div
+                className="fade-up mt-10"
+                style={{ "--index": 4 } as React.CSSProperties}
               >
                 <button
                   type="button"
@@ -126,7 +153,11 @@ export default function OnboardingFlow() {
               exit={{ opacity: 0, y: -8 }}
               transition={spring}
             >
-              <Interview idea={idea.trim()} onExit={() => setSubmitted(false)} />
+              <Interview
+                idea={idea.trim()}
+                description={description.trim()}
+                onExit={() => setSubmitted(false)}
+              />
             </motion.div>
           )}
         </AnimatePresence>

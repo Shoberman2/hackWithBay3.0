@@ -23,8 +23,8 @@ export interface OnboardingTurn {
   done: boolean;
 }
 
-const MIN_QUESTIONS = 6;
-const MAX_QUESTIONS = 8;
+const MIN_QUESTIONS = 3;
+const MAX_QUESTIONS = 4;
 
 const resultSchema = z.object({
   refined_idea: z.string().min(1),
@@ -126,10 +126,22 @@ function scriptedTurn(history: ChatMessage[]): OnboardingTurn {
         meaningful.length > 0
           ? `${idea} - ${meaningful.join(", ")}`
           : idea,
-      tags: meaningful.map(slugify),
+      tags: [
+        ...meaningful.map(slugify),
+        ...idea
+          .split(/\s+/)
+          .filter((w) => w.length > 3)
+          .map(slugify),
+      ]
+        .filter(Boolean)
+        .filter((t, i, a) => a.indexOf(t) === i)
+        .slice(0, 10),
       search_terms: [
         idea,
-        ...meaningful.slice(0, 3).map((a) => `${idea} ${a}`),
+        ...meaningful.map((a) => `${idea} ${a}`),
+        `${idea} competitors`,
+        `alternatives to ${idea}`,
+        `${idea} startups`,
       ].filter((s) => s.length > 0),
     },
   };
@@ -157,7 +169,8 @@ Rules:
   While asking: {"question": string, "options": string[], "done": false}
   When finished: {"done": true, "result": {"refined_idea": string, "tags": string[], "search_terms": string[]}}
 - "refined_idea" is 1-2 sentences capturing the positioning the answers pinned down.
-- "tags" are short kebab-case labels for the chosen positioning; "search_terms" are 4-8 web-search queries for discovering competitors, including any competitor names the founder mentioned.`;
+- "tags" are 6-10 short kebab-case labels spanning the category, the segment/audience, the business model, the delivery form-factor, and the key differentiators (e.g. "ai-code-review", "developer-tools", "github-native", "pr-automation", "self-serve", "seed-stage"). Be generous — more tags surface more of the landscape.
+- "search_terms" are 6-10 web-search queries for discovering competitors, including any competitor names the founder mentioned plus adjacent-category and "alternatives to X" phrasings.`;
 
 function stripFences(text: string): string {
   return text

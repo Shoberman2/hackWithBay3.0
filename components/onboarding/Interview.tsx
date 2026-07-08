@@ -77,11 +77,33 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-function buildLocalResult(idea: string, answers: QA[]): OnboardingResult {
+function buildLocalResult(
+  idea: string,
+  answers: QA[],
+  description = "",
+): OnboardingResult {
+  const descWords = description
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 8);
   return {
-    refined_idea: `${idea} (${answers.map((a) => a.answer.toLowerCase()).join("; ")})`,
-    tags: answers.map((a) => slugify(a.answer)),
-    search_terms: [idea, `${idea} startups`, `${idea} competitors`],
+    refined_idea: description
+      ? `${idea}. ${description}`
+      : `${idea} (${answers.map((a) => a.answer.toLowerCase()).join("; ")})`,
+    tags: [
+      ...answers.map((a) => slugify(a.answer)),
+      ...descWords.map(slugify),
+    ]
+      .filter(Boolean)
+      .filter((t, i, a) => a.indexOf(t) === i)
+      .slice(0, 10),
+    search_terms: [
+      idea,
+      `${idea} startups`,
+      `${idea} competitors`,
+      `alternatives to ${idea}`,
+      ...answers.slice(0, 3).map((a) => `${idea} ${a.answer}`),
+    ].filter((s) => s.trim().length > 0),
   };
 }
 
@@ -110,11 +132,17 @@ type Phase = "thinking" | "asking" | "starting" | "error";
 
 interface InterviewProps {
   idea: string;
+  /** Optional longer description; sharpens tags, search terms, discovery. */
+  description?: string;
   /** Back from the first question returns to the idea input. */
   onExit: () => void;
 }
 
-export default function Interview({ idea, onExit }: InterviewProps) {
+export default function Interview({
+  idea,
+  description = "",
+  onExit,
+}: InterviewProps) {
   const router = useRouter();
 
   const [phase, setPhase] = useState<Phase>("thinking");
@@ -134,9 +162,11 @@ export default function Interview({ idea, onExit }: InterviewProps) {
   const startSession = useCallback(
     async (finalAnswers: QA[], result: OnboardingResult | undefined) => {
       setPhase("starting");
-      const finalResult = result ?? buildLocalResult(idea, finalAnswers);
+      const finalResult =
+        result ?? buildLocalResult(idea, finalAnswers, description);
       const payload = {
         idea,
+        description,
         answers: finalAnswers,
         result: finalResult,
       };
@@ -170,7 +200,7 @@ export default function Interview({ idea, onExit }: InterviewProps) {
       }
       router.push(`/session/${id}?${query.toString()}`);
     },
-    [idea, router],
+    [idea, description, router],
   );
 
   const advance = useCallback(
@@ -189,6 +219,7 @@ export default function Interview({ idea, onExit }: InterviewProps) {
           const res = await postJson<AgentOnboardingResponse>("/api/agent", {
             mode: "onboarding",
             idea,
+            description,
             answers: currentAnswers,
           });
           if (res.done) {
@@ -225,7 +256,7 @@ export default function Interview({ idea, onExit }: InterviewProps) {
       );
       setPhase("asking");
     },
-    [history, idea, startSession],
+    [history, idea, description, startSession],
   );
 
   // First question on mount.
