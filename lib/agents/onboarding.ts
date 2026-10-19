@@ -40,7 +40,7 @@ const turnSchema = z.object({
 });
 
 /* ------------------------------------------------------------------ */
-/* Demo script (also the fallback when the gateway misbehaves)         */
+/* Demo script                                                         */
 /* ------------------------------------------------------------------ */
 
 const SCRIPT: Array<{ question: string; options: string[] }> = [
@@ -185,29 +185,24 @@ export async function runOnboarding(
     });
   }
 
+  const first = await chat(messages, { json: true, temperature: 0.4 });
   try {
-    const first = await chat(messages, { json: true, temperature: 0.4 });
-    try {
-      return parseTurn(first);
-    } catch (parseError) {
-      const retry = await chat(
-        [
-          ...messages,
-          { role: "assistant", content: first },
-          {
-            role: "user",
-            content: `Your last response was invalid (${String(
-              parseError instanceof Error ? parseError.message : parseError,
-            )}). Respond again with ONLY the JSON, exactly matching the required shape.`,
-          },
-        ],
-        { json: true, temperature: 0 },
-      );
-      return parseTurn(retry);
-    }
-  } catch {
-    // Gateway unavailable or persistently malformed: scripted fallback.
-    return scriptedTurn(history);
+    return parseTurn(first);
+  } catch (parseError) {
+    const retry = await chat(
+      [
+        ...messages,
+        { role: "assistant", content: first },
+        {
+          role: "user",
+          content: `Your last response was invalid (${String(
+            parseError instanceof Error ? parseError.message : parseError,
+          )}). Respond again with ONLY the JSON, exactly matching the required shape.`,
+        },
+      ],
+      { json: true, temperature: 0 },
+    );
+    return parseTurn(retry);
   }
 }
 

@@ -7,7 +7,7 @@
  * fixture replay inside useGraphStream.
  */
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import type { GraphNode } from "@/lib/types";
@@ -52,6 +52,7 @@ export default function SessionPage({
   const {
     data,
     status,
+    stage,
     insights,
     expand,
     highlight,
@@ -72,6 +73,14 @@ export default function SessionPage({
   const [reportError, setReportError] = useState<string | null>(null);
   const [needsPayment, setNeedsPayment] = useState(true);
   const [unlocked, setUnlocked] = useState(false);
+  const [updatesEnabled, setUpdatesEnabled] = useState(false);
+  const [updatesSaving, setUpdatesSaving] = useState(false);
+  const [updatesError, setUpdatesError] = useState<string | null>(null);
+
+  const updateIndustry = useMemo(() => {
+    const idea = data.nodes.find((n) => n.label === "Idea");
+    return String(idea?.text ?? idea?.name ?? id);
+  }, [data.nodes, id]);
 
   const generateReport = useCallback(async () => {
     setReportLoading(true);
@@ -152,6 +161,54 @@ export default function SessionPage({
     (next: Highlight | null) => setHighlight(next),
     [setHighlight],
   );
+
+  useEffect(() => {
+    let ignore = false;
+    async function loadPreference(): Promise<void> {
+      try {
+        const res = await fetch(`/api/updates?sessionId=${encodeURIComponent(id)}`);
+        if (!res.ok) return;
+        const body = (await res.json()) as {
+          subscription?: { enabled?: boolean } | null;
+        };
+        if (!ignore) setUpdatesEnabled(Boolean(body.subscription?.enabled));
+      } catch {
+        // Loading this preference is non-blocking.
+      }
+    }
+    void loadPreference();
+    return () => {
+      ignore = true;
+    };
+  }, [id]);
+
+  const toggleUpdates = useCallback(async () => {
+    const next = !updatesEnabled;
+    setUpdatesEnabled(next);
+    setUpdatesSaving(true);
+    setUpdatesError(null);
+    try {
+      const res = await fetch("/api/updates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: id,
+          industry: updateIndustry,
+          enabled: next,
+        }),
+      });
+      const body = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setUpdatesEnabled(!next);
+        setUpdatesError(body.error ?? "Could not save update preference.");
+      }
+    } catch {
+      setUpdatesEnabled(!next);
+      setUpdatesError("Could not save update preference.");
+    } finally {
+      setUpdatesSaving(false);
+    }
+  }, [id, updateIndustry, updatesEnabled]);
 
   if (authLoading) {
     return (
@@ -258,7 +315,7 @@ export default function SessionPage({
         <div className="border-b border-line px-5 py-4">
           <StreamStatus
             status={status}
-            stage={null}
+            stage={stage}
             nodeCount={data.nodes.length}
             linkCount={data.links.length}
           />
@@ -283,6 +340,35 @@ export default function SessionPage({
           />
 
           <div className="border-t border-line px-5 py-4">
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-[6px] border border-line px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">
+                  Industry updates
+                </p>
+                <p className="truncate text-xs text-ink-2">
+                  Weekly changes for this landscape
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={updatesEnabled}
+                onClick={toggleUpdates}
+                disabled={updatesSaving}
+                className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                  updatesEnabled ? "bg-ink" : "bg-line"
+                } disabled:opacity-60`}
+              >
+                <span
+                  className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${
+                    updatesEnabled ? "translate-x-6" : "translate-x-1"
+                  }`}
+                />
+              </button>
+            </div>
+            {updatesError && (
+              <p className="mb-3 text-xs text-[#B42318]">{updatesError}</p>
+            )}
             <button
               type="button"
               onClick={openReport}

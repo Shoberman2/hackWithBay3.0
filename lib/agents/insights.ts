@@ -25,7 +25,7 @@ export interface AlgoResult {
   links: GraphLink[];
 }
 
-/** LLM polish for the card body; deterministic fallback if the gateway fails. */
+/** LLM polish for the card body; deterministic fallback only in demo mode. */
 async function phrase(facts: string, fallback: string): Promise<string> {
   try {
     const body = await chat(
@@ -40,9 +40,12 @@ async function phrase(facts: string, fallback: string): Promise<string> {
       { temperature: 0.3, maxTokens: 120 },
     );
     const trimmed = body.trim();
-    return trimmed.length > 0 ? trimmed : fallback;
-  } catch {
-    return fallback;
+    if (trimmed.length > 0) return trimmed;
+    if (isDemoMode()) return fallback;
+    throw new Error("Butterbase AI gateway returned empty insight copy");
+  } catch (error) {
+    if (isDemoMode()) return fallback;
+    throw error;
   }
 }
 

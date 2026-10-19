@@ -71,7 +71,15 @@ export interface DiscoverOptions {
   postedAfter?: string;
   /** Per-source result cap (YC/HN). */
   maxDocsPerSource?: number;
+  /** Total deduped documents handed to extraction. */
+  maxTotalDocs?: number;
+  /** Max wall time for any one source connector. */
+  sourceTimeoutMs?: number;
 }
+
+const DEFAULT_DOCS_PER_SOURCE = 8;
+const DEFAULT_TOTAL_DOCS = 32;
+const DEFAULT_SOURCE_TIMEOUT_MS = 10_000;
 
 function dedupeByUrl(docs: RawDoc[]): RawDoc[] {
   const seen = new Set<string>();
@@ -82,6 +90,28 @@ function dedupeByUrl(docs: RawDoc[]): RawDoc[] {
     out.push(doc);
   }
   return out;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  fallback: T,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          debugLog("source timed out", label);
+          resolve(fallback);
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**
@@ -95,23 +125,31 @@ export async function discoverAll(
   const terms = searchTerms.filter((t) => t.trim().length > 0);
   if (terms.length === 0) return [];
   const topicSlugs = opts.topicSlugs ?? terms.slice(0, 3).map(toTopicSlug);
+  const perSource = opts.maxDocsPerSource ?? DEFAULT_DOCS_PER_SOURCE;
+  const total = opts.maxTotalDocs ?? DEFAULT_TOTAL_DOCS;
+  const sourceTimeout = opts.sourceTimeoutMs ?? DEFAULT_SOURCE_TIMEOUT_MS;
   const subject = opts.idea ?? terms.join(", ");
   const question =
     `List the notable startups competing in this space: ${subject}. ` +
     "For each, state what it does, who founded it, and any funding rounds with investors.";
 
   const settled = await Promise.allSettled([
-    searchYc(terms, opts.maxDocsPerSource),
-    searchHn(terms),
-    searchProductHunt(topicSlugs, terms, opts.postedAfter),
-    webSearch(question),
+    withTimeout(searchYc(terms, perSource), sourceTimeout, [], "yc"),
+    withTimeout(searchHn(terms, perSource), sourceTimeout, [], "hn"),
+    withTimeout(
+      searchProductHunt(topicSlugs, terms, opts.postedAfter, perSource),
+      sourceTimeout,
+      [],
+      "producthunt",
+    ),
+    withTimeout(webSearch(question), sourceTimeout, [], "websearch"),
   ]);
   const docs: RawDoc[] = [];
   for (const result of settled) {
     if (result.status === "fulfilled") docs.push(...result.value);
     else debugLog("discover source rejected", result.reason);
   }
-  return dedupeByUrl(docs);
+  return dedupeByUrl(docs).slice(0, total);
 }
 
 /** Scaffold contract: fan out to every configured connector for a query. */

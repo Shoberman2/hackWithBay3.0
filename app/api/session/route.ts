@@ -57,7 +57,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     await writeIdea({
-      id,
       text: body.result?.refined_idea ?? body.idea,
       session_id: id,
       created_at: new Date().toISOString(),

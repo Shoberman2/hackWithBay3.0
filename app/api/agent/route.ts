@@ -46,20 +46,8 @@ const bodySchema = z.discriminatedUnion("mode", [
   }),
 ]);
 
-/**
- * In-memory metering fallback for demo mode / while lib/butterbase.ts is
- * unimplemented. Module-scoped, so it resets on redeploy — acceptable for
- * the free-tier counter, and the Butterbase DB path takes over as soon as
- * it exists.
- */
-const memoryCounts = new Map<string, number>();
-
 async function countQuestions(sessionId: string): Promise<number> {
-  try {
-    return await getQuestionCount(sessionId);
-  } catch {
-    return memoryCounts.get(sessionId) ?? 0;
-  }
+  return getQuestionCount(sessionId);
 }
 
 async function meterQuestion(
@@ -68,11 +56,7 @@ async function meterQuestion(
   cypher: string | undefined,
   answer: string,
 ): Promise<void> {
-  try {
-    await recordQuestion(sessionId, question, cypher, answer);
-  } catch {
-    memoryCounts.set(sessionId, (memoryCounts.get(sessionId) ?? 0) + 1);
-  }
+  await recordQuestion(sessionId, question, cypher, answer);
 }
 
 export async function POST(request: Request): Promise<NextResponse> {

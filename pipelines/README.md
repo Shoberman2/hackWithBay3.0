@@ -9,9 +9,11 @@ allowed), so every node is documented here and in each component's
 
 ### Topology
 
-```
-webhook_1 (source)  -->  llm_extract (LLM via Butterbase gateway)  -->  response_1 (JSON out)
-        data lane                    text lane
+```text
+webhook_1 -> parse_1 -> extract_data_1 -> response_answers_1
+                              ^
+                              |
+                         llm_openai_1
 ```
 
 - **`webhook_1`** — the pipeline's source node (every RocketRide pipeline
@@ -20,39 +22,29 @@ webhook_1 (source)  -->  llm_extract (LLM via Butterbase gateway)  -->  response
   `{ idea: string, tags: string[], raw_documents: [{ url, source_type, title, text, date? }] }`.
   The app sends this over the SDK WebSocket (`client.send(token, JSON.stringify(input), { name: "input.json" }, "application/json")`),
   never plain `fetch()`.
-- **`llm_extract`** — the LLM node (docs.rocketride.org/nodes; 13 providers
-  supported) configured as an OpenAI-compatible provider pointed at the
-  Butterbase gateway base URL `https://api.butterbase.ai/v1` with model
-  `anthropic/claude-3.5-sonnet`. The API key is the placeholder
-  `${ROCKETRIDE_BUTTERBASE_AI_KEY}`; `lib/rocketride.ts` injects the real
-  `BUTTERBASE_AI_KEY` as an env override at `use()` time
-  (`client.use({ filepath, env: { ROCKETRIDE_BUTTERBASE_AI_KEY: ... } })`),
-  so no raw provider key is ever stored in the pipeline file or on the
-  RocketRide dashboard. The system prompt demands ONLY `ExtractedBatch`
-  JSON (schema in `lib/types.ts`), `source_url` copied verbatim from the
-  input doc on every entity, `props.confidence` 0-1 on every relationship,
-  and null for unknowns — never guessed values.
-- **`response_1`** — returns the LLM's JSON text as the synchronous result
-  of the `send()` call, which `lib/rocketride.ts` zod-validates
+- **`parse_1`** — converts the webhook payload into text for the structured
+  extraction component.
+- **`extract_data_1`** — structured extraction component. It invokes
+  `llm_openai_1` through RocketRide's control plane and emits answers.
+- **`llm_openai_1`** — LLM control provider configured for the Butterbase
+  OpenAI-compatible gateway (`https://api.butterbase.ai/v1`) with model
+  `anthropic/claude-3.5-sonnet`. The `.pipe` keeps the placeholder
+  `${ROCKETRIDE_BUTTERBASE_AI_KEY}`; `scripts/deploy-rocketride.ts`
+  substitutes the real Butterbase key in memory during validation/deploy,
+  so no secret is committed to git. The extraction instructions demand ONLY
+  `ExtractedBatch` JSON (schema in `lib/types.ts`), `source_url` copied
+  verbatim from the input doc on every entity, `props.confidence` 0-1 on
+  every relationship, and null for unknowns — never guessed values.
+- **`response_answers_1`** — returns the extraction JSON as the synchronous
+  result of the `send()` call, which `lib/rocketride.ts` zod-validates
   (`parseExtractedBatch`) before anything reaches the graph writer.
 
 ### Caveats
 
-- This file was authored by hand against the SDK's `PipelineConfig` /
-  `PipelineComponent` typings (`rocketride@1.3.0`,
-  `dist/types/types/pipeline.d.ts`) and the docs.rocketride.org
-  conventions. The VS Code extension could not be run in this
-  environment, so provider-specific `config` keys on `llm_extract` /
-  `response_1` (`base_url`, `response_format`, `lanes`, ...) are
-  best-effort and should be reconciled in the extension's node inspector
-  before the one-click deploy to cloud.rocketride.ai.
-- Deploy early (PLAN.md Phase 3): open the file in the RocketRide VS Code
-  extension, verify the three nodes resolve, then one-click deploy to
-  `https://cloud.rocketride.ai`. Keep the local Docker engine
-  (`ghcr.io/rocketride-org/rocketride-engine:latest`, port 5565) as the
-  demo fallback.
-- If the remote pipe fails at runtime (connect error, unparseable output,
-  schema violation), `lib/rocketride.ts` falls back to local extraction
-  through the Butterbase gateway (`lib/pipeline/extract.ts`) with the
-  identical prompt and validation, and the pipeline conductor notes in
-  the SSE event stream that extraction ran locally.
+- Deploy with `npm run rocketride:deploy`. The script validates the pipe
+  against RocketRide Cloud, creates or updates the deployment, and starts a
+  reusable cloud task for project `2849d160-3b2a-4119-a6d1-b070070c18d3`
+  and source `webhook_1`.
+- In live mode, RocketRide failures are surfaced instead of falling back
+  locally. `DEMO_MODE=true` is the only path that uses local fixture/demo
+  behavior.

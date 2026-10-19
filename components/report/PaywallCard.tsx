@@ -1,10 +1,8 @@
 "use client";
 
 /**
- * Quiet paywall panel for the full landscape report ($9 one-time).
- * Starts checkout via /api/checkout; real mode redirects to Stripe
- * Checkout and confirms on return, demo mode polls the fake order until
- * it settles. Calls onUnlocked once the purchase is paid.
+ * Quiet unlock panel for the full landscape report. Product mode redirects
+ * to Stripe Checkout; free-event mode records a persisted Butterbase unlock.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -53,7 +51,7 @@ export default function PaywallCard({ sessionId, onUnlocked }: PaywallCardProps)
           }
           if (body.status === "failed" || body.status === "refunded") {
             setPhase("idle");
-            setError("The payment did not go through. You have not been charged.");
+            setError("The unlock did not go through.");
             return;
           }
         } catch {
@@ -63,7 +61,7 @@ export default function PaywallCard({ sessionId, onUnlocked }: PaywallCardProps)
       }
       if (!stopped.current) {
         setPhase("idle");
-        setError("Payment confirmation timed out. If you paid, refresh this page.");
+        setError("Confirmation timed out. Refresh this page and try again.");
       }
     },
     [sessionId, onUnlocked],
@@ -119,13 +117,11 @@ export default function PaywallCard({ sessionId, onUnlocked }: PaywallCardProps)
         <h3 className="text-base font-semibold tracking-tight text-ink">
           Full landscape report
         </h3>
-        <span className="font-mono text-sm text-ink">$9</span>
       </div>
       <p className="mt-3 text-sm leading-6 text-ink-2">
         The complete written analysis of your graph: competitive clusters,
         white space, founder patterns, moat comparison, and a positioning
-        recommendation. One-time purchase, plus unlimited agent questions for
-        this session.
+        recommendation, plus unlimited agent questions for this session.
       </p>
       <button
         type="button"
@@ -140,7 +136,7 @@ export default function PaywallCard({ sessionId, onUnlocked }: PaywallCardProps)
       </button>
       {phase === "confirming" && (
         <p className="mt-3 text-center font-mono text-xs text-ink-2">
-          Waiting for the order to settle
+          Confirming the unlock
         </p>
       )}
       {error && <p className="mt-3 text-sm text-[#B42318]">{error}</p>}

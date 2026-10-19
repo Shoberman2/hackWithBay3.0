@@ -197,8 +197,9 @@ async function digestFromNeo4j(): Promise<GraphDigest> {
 
   const rows = <T>(settled: PromiseSettledResult<unknown>): T[] => {
     if (settled.status === "fulfilled") return settled.value as T[];
-    debugLog("digest query failed:", settled.reason);
-    return [];
+    throw settled.reason instanceof Error
+      ? settled.reason
+      : new Error(String(settled.reason));
   };
 
   const digest: GraphDigest = {

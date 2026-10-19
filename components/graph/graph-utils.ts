@@ -6,6 +6,7 @@
  */
 
 import type { InsightKind, NodeLabel } from "@/lib/types";
+import type { GraphNode } from "@/lib/types";
 
 /* Node fill colors, keyed by label. Desaturated per the design system. */
 export const NODE_COLORS: Record<NodeLabel, string> = {
@@ -113,6 +114,33 @@ export function linkKeyOf(link: {
   type: string;
 }): string {
   return `${endpointId(link.source)}|${link.type}|${endpointId(link.target)}`;
+}
+
+/** Bare hostname for a company URL, with source_url as a fallback. */
+export function companyDomain(node: GraphNode): string | null {
+  if (node.label !== "Company") return null;
+  const raw =
+    typeof node.url === "string" && node.url
+      ? node.url
+      : typeof node.source_url === "string" && node.source_url
+        ? node.source_url
+        : "";
+  if (!raw) return null;
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    return new URL(withScheme).hostname.replace(/^www\./i, "");
+  } catch {
+    return null;
+  }
+}
+
+/** Browser-loadable favicon endpoint for company nodes. */
+export function companyLogoUrl(node: GraphNode): string | null {
+  const domain = companyDomain(node);
+  if (!domain) return null;
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(
+    domain,
+  )}&sz=64`;
 }
 
 /** Compact USD formatting for funding amounts: 200000000 -> $200M. */

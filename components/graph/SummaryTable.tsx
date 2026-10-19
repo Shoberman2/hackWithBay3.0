@@ -7,7 +7,7 @@
  * rows into their new order (framer-motion `layout`). Same light surface,
  * hairline dividers, and mono numerals as the rest of the app.
  *
- * Reads the full landscape from /api/graph/[sessionId] (fixture in demo),
+ * Reads the full landscape from /api/graph/[sessionId],
  * independent of what the graph has revealed -- the table always summarizes
  * the whole market.
  */
@@ -16,9 +16,6 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import type { GraphLink, GraphNode } from "@/lib/types";
 import { endpointId, formatUsd } from "./graph-utils";
-import demoGraphRaw from "@/fixtures/demo-graph.json";
-
-const fixture = demoGraphRaw as unknown as { nodes: GraphNode[]; links: GraphLink[] };
 
 interface Row {
   id: string;
@@ -152,21 +149,28 @@ export default function SummaryTable({
   selectedId?: string | null;
 }) {
   const [graph, setGraph] = useState<{ nodes: GraphNode[]; links: GraphLink[] }>({
-    nodes: fixture.nodes,
-    links: fixture.links,
+    nodes: [],
+    links: [],
   });
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("raised");
   const [descending, setDescending] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/graph/${encodeURIComponent(sessionId)}`)
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => {
+        if (!res.ok) throw new Error(`graph returned ${res.status}`);
+        return res.json();
+      })
       .then((body: { nodes?: GraphNode[]; links?: GraphLink[] } | null) => {
         if (cancelled || !body?.nodes?.length) return;
         setGraph({ nodes: body.nodes, links: body.links ?? [] });
+        setLoadError(null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setLoadError("Could not load the graph summary.");
+      });
     return () => {
       cancelled = true;
     };
@@ -210,10 +214,10 @@ export default function SummaryTable({
           Landscape summary
         </h2>
         <p className="mt-0.5 text-[13px] text-ink-2">
-          {rows.length} companies · sorted by{" "}
-          <span className="text-ink">{COLUMNS.find((c) => c.key === sortKey)?.label}</span>{" "}
-          {descending ? "high to low" : "low to high"}. Tap a header to re-sort, a row to
-          focus it on the graph.
+          {loadError ??
+            `${rows.length} companies - sorted by ${
+              COLUMNS.find((c) => c.key === sortKey)?.label
+            } ${descending ? "high to low" : "low to high"}. Tap a header to re-sort, a row to focus it on the graph.`}
         </p>
       </div>
 

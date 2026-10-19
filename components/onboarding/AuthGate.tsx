@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import type { AuthUser } from "@/components/account/AuthProvider";
+import {
+  cacheAuthUser,
+  type AuthUser,
+} from "@/components/account/AuthProvider";
 
 const spring = { type: "spring", stiffness: 100, damping: 20 } as const;
 
@@ -72,6 +75,7 @@ export default function AuthGate({
         setError(body.error ?? "Could not sign you in. Try again.");
         return;
       }
+      cacheAuthUser(body.user);
       onAuthenticated(body.user);
     } catch {
       setError("Could not reach the server. Check your connection and retry.");

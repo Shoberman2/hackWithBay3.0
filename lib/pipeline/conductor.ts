@@ -9,7 +9,7 @@
  *   unavailable the event stream notes that extraction ran locally.
  * - Demo mode: stream fixtures/demo-graph.json progressively (nodes in
  *   dependency order, 120ms apart, then insight cards) with the identical
- *   event shape — the on-stage graph always assembles, credentials or not.
+ *   event shape.
  */
 
 import { readFileSync } from "node:fs";
@@ -27,7 +27,7 @@ import type {
 import { linkKey } from "@/lib/types";
 import { runExtraction, usesRemoteExtraction, expandQuery } from "@/lib/rocketride";
 import { dedupeBatch, emptyExisting, absorbBatch } from "@/lib/pipeline/dedupe";
-import { writeEntities } from "@/lib/pipeline/write";
+import { writeEntities, writeIdea } from "@/lib/pipeline/write";
 import { fetchAllSources } from "@/lib/sources";
 import {
   assignGraphMetrics,
@@ -259,10 +259,40 @@ export async function* runDemoPipeline(
 
 const EXTRACTION_BATCH_SIZE = 5;
 
+function searchTermsFromRequest(
+  idea: string,
+  tags: string[],
+  searchTerms: string[],
+): string[] {
+  return Array.from(
+    new Set(
+      [
+        ...searchTerms,
+        idea,
+        ...tags.map((tag) => `${idea} ${tag}`),
+      ]
+        .map((term) => term.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 8);
+}
+
+function sessionScopedBatch(
+  batch: ExtractedBatch,
+  sessionId: string,
+): ExtractedBatch {
+  return {
+    ...batch,
+    relationships: batch.relationships.map((rel) =>
+      rel.type === "RELEVANT_TO" ? { ...rel, to: sessionId } : rel,
+    ),
+  };
+}
+
 /**
  * Run the full pipeline for a session, yielding PipelineEvents for the
- * SSE route. In demo mode (or when core services are unconfigured) this
- * streams the fixture graph with the identical event shape.
+ * SSE route. In live mode RocketRide, Neo4j, and Butterbase failures are
+ * surfaced instead of replaying the fixture graph.
  */
 export async function* runPipeline(
   idea: string,
@@ -281,17 +311,15 @@ export async function* runPipeline(
     stage: "expand",
     message: "Expanding the idea into search queries",
   };
-  let terms = searchTerms.filter(Boolean);
-  try {
-    terms = await expandQuery({
-      refined_idea: idea,
-      tags,
-      search_terms: terms,
-    });
-  } catch (err) {
-    debug("expandQuery failed:", err);
-    if (terms.length === 0) terms = [idea];
-  }
+  const providedTerms = searchTermsFromRequest(idea, tags, searchTerms);
+  const terms =
+    providedTerms.length > 1
+      ? providedTerms
+      : await expandQuery({
+          refined_idea: idea,
+          tags,
+          search_terms: searchTerms.filter(Boolean),
+        });
 
   /* -------- discover -------- */
   yield {
@@ -304,16 +332,10 @@ export async function* runPipeline(
     docs = await fetchAllSources({ idea, searchTerms: terms, tags });
   } catch (err) {
     debug("fetchAllSources failed:", err);
+    throw err;
   }
   if (docs.length === 0) {
-    // Demo insurance: never leave the stage empty.
-    yield {
-      type: "status",
-      stage: "discover",
-      message: "No live documents found; falling back to the demo landscape",
-    };
-    yield* runDemoPipeline(sessionId);
-    return;
+    throw new Error("Source discovery returned no documents for this idea");
   }
 
   /* -------- extract / dedupe / write (streaming batches) -------- */
@@ -322,7 +344,7 @@ export async function* runPipeline(
     stage: "extract",
     message: usesRemoteExtraction()
       ? `Extracting entities from ${docs.length} documents on RocketRide Cloud`
-      : `Extracting entities from ${docs.length} documents locally via the Butterbase gateway (RocketRide not configured)`,
+      : `RocketRide Cloud is not configured`,
   };
 
   const ideaNode: GraphNode = {
@@ -334,6 +356,12 @@ export async function* runPipeline(
     created_at: new Date().toISOString(),
     refined_tags: tags,
   };
+  await writeIdea({
+    text: idea,
+    session_id: sessionId,
+    created_at: String(ideaNode.created_at),
+    refined_tags: tags,
+  });
   yield { type: "entity", nodes: [ideaNode], links: [] };
 
   const existing = emptyExisting();
@@ -346,11 +374,7 @@ export async function* runPipeline(
     const deduped = dedupeBatch(batch, existing);
     absorbBatch(existing, deduped);
 
-    try {
-      await writeEntities(deduped);
-    } catch (err) {
-      debug("writeEntities failed (streaming continues):", err);
-    }
+    await writeEntities(sessionScopedBatch(deduped, sessionId));
 
     const { nodes, links } = batchToGraph(deduped, ideaNode.id);
     const newNodes = nodes.filter((n) => !allNodes.has(n.id));
@@ -385,6 +409,7 @@ export async function* runPipeline(
       await writeMetricsBack(nodes);
     } catch (err) {
       debug("writeMetricsBack failed:", err);
+      throw err;
     }
     cards = deriveInsights(nodes, links);
   } catch (err) {

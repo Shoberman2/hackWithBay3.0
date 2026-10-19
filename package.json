@@ -6,7 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "neo4j:check": "tsx scripts/check-neo4j.ts",
+    "neo4j:schema": "tsx scripts/apply-schema.ts",
+    "neo4j:seed": "tsx scripts/seed.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "butterbase:provision": "tsx scripts/provision-butterbase.ts --apply",
+    "butterbase:dry-run": "tsx scripts/provision-butterbase.ts --dry-run",
+    "rocketride:deploy": "tsx scripts/deploy-rocketride.ts"
   },
   "dependencies": {
     "@butterbase/sdk": "^2.8.1",

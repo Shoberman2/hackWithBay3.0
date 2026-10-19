@@ -5,14 +5,10 @@
  * never plain fetch() against cloud.rocketride.ai:
  *   connect -> use({ filepath }) -> send(token, payload) -> terminate -> disconnect.
  *
- * Fallback ladder (demo insurance):
- * - !hasRocketRide() or DEMO_MODE -> local extraction via lib/pipeline/extract.ts
- *   (the conductor notes in the event stream that extraction ran locally).
- * - Remote call throws or returns unparseable output -> local extraction.
+ * In live mode the cloud pipeline is required. Local extraction is only a
+ * demo-mode helper; a local-only pipeline does not satisfy the submission.
  */
 
-import path from "node:path";
-import { RocketRideClient } from "rocketride";
 import { env, hasGateway, hasRocketRide } from "@/lib/env";
 import type { ExtractedBatch, OnboardingResult, RawDoc } from "@/lib/types";
 import {
@@ -26,13 +22,21 @@ function debug(...args: unknown[]): void {
   if (env.DEBUG) console.error("[rocketride]", ...args);
 }
 
+// Vercel's serverless bundling can include an incompatible optional
+// `bufferutil` export for ws, which crashes RocketRide sends with
+// "mask is not a function". Force ws onto its portable JS implementation
+// before dynamically importing the RocketRide client.
+process.env.WS_NO_BUFFER_UTIL ??= "1";
+
 export interface ExtractionInput {
   idea: string;
   tags: string[];
   raw_documents: RawDoc[];
 }
 
-const PIPE_PATH = path.join(process.cwd(), "pipelines", "rivalry-extract.pipe");
+export const ROCKETRIDE_EXTRACTION_PROJECT_ID =
+  "2849d160-3b2a-4119-a6d1-b070070c18d3";
+export const ROCKETRIDE_EXTRACTION_SOURCE = "webhook_1";
 
 /** True when extraction will run on the deployed RocketRide cloud pipe. */
 export function usesRemoteExtraction(): boolean {
@@ -85,23 +89,22 @@ function stripFences(text: string): string {
 async function runRemoteExtraction(
   input: ExtractionInput,
 ): Promise<ExtractedBatch> {
+  const { RocketRideClient } = await import("rocketride");
   const client = new RocketRideClient({
     auth: env.ROCKETRIDE_APIKEY,
     uri: env.ROCKETRIDE_URI,
   });
   await client.connect();
-  let token: string | undefined;
   try {
-    const useResult = await client.use({
-      filepath: PIPE_PATH,
-      name: "rivalry-extract",
-      // The .pipe references ${ROCKETRIDE_BUTTERBASE_AI_KEY} so the LLM
-      // node talks to the Butterbase gateway (never raw provider keys).
-      env: env.BUTTERBASE_AI_KEY
-        ? { ROCKETRIDE_BUTTERBASE_AI_KEY: env.BUTTERBASE_AI_KEY }
-        : undefined,
+    const token = await client.getTaskToken({
+      projectId: ROCKETRIDE_EXTRACTION_PROJECT_ID,
+      source: ROCKETRIDE_EXTRACTION_SOURCE,
     });
-    token = useResult.token;
+    if (!token) {
+      throw new Error(
+        `RocketRide deployment is not running for ${ROCKETRIDE_EXTRACTION_PROJECT_ID}/${ROCKETRIDE_EXTRACTION_SOURCE}. Run npm run rocketride:deploy.`,
+      );
+    }
     const result = await client.send(
       token,
       JSON.stringify(input),
@@ -110,13 +113,6 @@ async function runRemoteExtraction(
     );
     return parseExtractedBatch(coerceResultToJson(result));
   } finally {
-    if (token) {
-      try {
-        await client.terminate(token);
-      } catch (err) {
-        debug("terminate failed", err);
-      }
-    }
     try {
       await client.disconnect();
     } catch (err) {
@@ -134,14 +130,20 @@ export async function extractEntities(
   input: ExtractionInput,
 ): Promise<ExtractedBatch> {
   if (input.raw_documents.length === 0) return emptyBatch();
-  if (!usesRemoteExtraction()) {
+  if (env.DEMO_MODE) {
     return extractBatch(input.raw_documents, input.idea, input.tags);
+  }
+  if (!hasRocketRide()) {
+    throw new Error("RocketRide Cloud is not configured (ROCKETRIDE_APIKEY)");
+  }
+  if (!hasGateway()) {
+    throw new Error("Butterbase AI gateway is not configured for the RocketRide pipe");
   }
   try {
     return await runRemoteExtraction(input);
   } catch (err) {
-    debug("remote extraction failed, falling back to local:", err);
-    return extractBatch(input.raw_documents, input.idea, input.tags);
+    debug("remote extraction failed:", err);
+    throw err;
   }
 }
 
@@ -175,41 +177,39 @@ function cannedSearchTerms(onboarding: OnboardingResult): string[] {
 export async function expandQuery(
   onboarding: OnboardingResult,
 ): Promise<string[]> {
-  if (!hasGateway() || env.DEMO_MODE) return cannedSearchTerms(onboarding);
-  try {
-    const raw = await chat(
-      [
-        {
-          role: "system",
-          content:
-            "You expand a startup idea into search queries for competitive discovery. " +
-            'Respond with ONLY JSON: {"search_terms": string[]} — 5 to 8 short queries ' +
-            "covering the idea itself, adjacent phrasings, and each provided tag. No prose.",
-        },
-        {
-          role: "user",
-          content: JSON.stringify({
-            refined_idea: onboarding.refined_idea,
-            tags: onboarding.tags,
-            seed_terms: onboarding.search_terms,
-          }),
-        },
-      ],
-      { json: true, temperature: 0.2 },
-    );
-    const parsed = JSON.parse(stripFences(raw)) as { search_terms?: unknown };
-    if (
-      Array.isArray(parsed.search_terms) &&
-      parsed.search_terms.every((t) => typeof t === "string")
-    ) {
-      const terms = (parsed.search_terms as string[])
-        .map((t) => t.trim())
-        .filter(Boolean);
-      if (terms.length > 0) return terms.slice(0, 8);
-    }
-    return cannedSearchTerms(onboarding);
-  } catch (err) {
-    debug("expandQuery fell back to canned terms:", err);
-    return cannedSearchTerms(onboarding);
+  if (env.DEMO_MODE) return cannedSearchTerms(onboarding);
+  if (!hasGateway()) {
+    throw new Error("Butterbase AI gateway is not configured for query expansion");
   }
+  const raw = await chat(
+    [
+      {
+        role: "system",
+        content:
+          "You expand a startup idea into search queries for competitive discovery. " +
+          'Respond with ONLY JSON: {"search_terms": string[]} - 5 to 8 short queries ' +
+          "covering the idea itself, adjacent phrasings, and each provided tag. No prose.",
+      },
+      {
+        role: "user",
+        content: JSON.stringify({
+          refined_idea: onboarding.refined_idea,
+          tags: onboarding.tags,
+          seed_terms: onboarding.search_terms,
+        }),
+      },
+    ],
+    { json: true, temperature: 0.2 },
+  );
+  const parsed = JSON.parse(stripFences(raw)) as { search_terms?: unknown };
+  if (
+    Array.isArray(parsed.search_terms) &&
+    parsed.search_terms.every((t) => typeof t === "string")
+  ) {
+    const terms = (parsed.search_terms as string[])
+      .map((t) => t.trim())
+      .filter(Boolean);
+    if (terms.length > 0) return terms.slice(0, 8);
+  }
+  throw new Error("Butterbase AI gateway returned no query expansion terms");
 }

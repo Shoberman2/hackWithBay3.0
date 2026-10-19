@@ -130,7 +130,8 @@ export async function analyzeCompanyMoat(
       { json: true, temperature: 0.2 },
     );
     parsed = responseSchema.parse(JSON.parse(stripFences(raw)));
-  } catch {
+  } catch (error) {
+    if (!isDemoMode()) throw error;
     return empty;
   }
 

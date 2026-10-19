@@ -1,7 +1,7 @@
 /**
  * Local entity extraction via the Butterbase gateway (lib/gateway.ts).
- * This is the fallback path when the RocketRide cloud pipeline is not
- * configured; it enforces the exact same output contract (ExtractedBatch).
+ * This helper is for explicit demo/local development paths. Live extraction
+ * is hosted by RocketRide Cloud.
  *
  * Guarantees:
  * - The LLM is instructed to emit ONLY ExtractedBatch JSON.
@@ -276,8 +276,8 @@ function buildUserMessage(docs: RawDoc[], idea: string, tags: string[]): string 
 
 /**
  * Extract an ExtractedBatch from a batch of raw documents via the
- * Butterbase gateway. Never throws: on validation failure it retries once
- * with the validation error appended, then drops the batch (empty batch).
+ * Butterbase gateway. Demo mode returns an empty batch; live mode throws
+ * when the gateway is missing or the model cannot produce valid JSON.
  */
 export async function extractBatch(
   docs: RawDoc[],
@@ -285,10 +285,11 @@ export async function extractBatch(
   tags: string[],
 ): Promise<ExtractedBatch> {
   if (docs.length === 0) return emptyBatch();
-  if (!hasGateway() || env.DEMO_MODE) {
-    // Demo insurance: no gateway means no extraction; the conductor's
-    // demo path streams fixtures instead.
+  if (env.DEMO_MODE) {
     return emptyBatch();
+  }
+  if (!hasGateway()) {
+    throw new Error("Butterbase AI gateway is not configured for extraction");
   }
 
   const userMessage = buildUserMessage(docs, idea, tags);
@@ -317,6 +318,5 @@ export async function extractBatch(
     }
   }
 
-  debug("dropping batch after retry", { docs: docs.length });
-  return emptyBatch();
+  throw new Error(`Extraction failed after retry: ${lastError}`);
 }

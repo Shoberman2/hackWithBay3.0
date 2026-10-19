@@ -60,13 +60,16 @@ const BATCH_KEY: Record<string, string> = {
 
 async function main(): Promise<void> {
   loadEnvLocal();
-  const { hasNeo4j } = await import("../lib/env");
+  const { env, hasNeo4j, neo4jConfigErrorMessage } = await import("../lib/env");
   const { getDemoGraph, runRead, closeDriver } = await import("../lib/neo4j");
   const { writeEntities, writeIdea } = await import("../lib/pipeline/write");
   type AnyNode = Record<string, unknown> & { id: string; label: string; name: string };
 
   if (!hasNeo4j()) {
-    console.log("[seed] DEMO MODE (no Neo4j credentials) — the app already serves the fixture directly; nothing to seed.");
+    if (!env.DEMO_MODE) {
+      throw new Error(neo4jConfigErrorMessage());
+    }
+    console.log("[seed] DEMO MODE (no Neo4j credentials) - the app serves the fixture directly; nothing to seed.");
     return;
   }
 

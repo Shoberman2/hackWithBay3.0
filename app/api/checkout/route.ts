@@ -1,11 +1,9 @@
 /**
  * POST /api/checkout { sessionId } -> { orderId, checkoutUrl, demo }
  *
- * Creates the "Full Landscape Report" product (once) and a purchase for
- * this session via Butterbase billing. In real mode the client redirects
- * to checkoutUrl (Stripe Checkout); in demo mode checkoutUrl is empty,
- * demo is true, and the client polls /api/checkout/status until the fake
- * order settles.
+ * Creates an unlock for this session. Product mode redirects to Butterbase
+ * Billing / Stripe Checkout; FREE_REPORT_UNLOCK records a paid unlock in
+ * Butterbase Data API with no money movement; demo mode uses memory only.
  */
 
 import { NextRequest, NextResponse } from "next/server";

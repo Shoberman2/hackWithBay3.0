@@ -2,12 +2,12 @@
  * Full current graph for a session as { nodes, links } — the client
  * re-hydrates from here on page load / mid-stream refresh.
  *
- * Demo mode (or any Neo4j failure) serves the fixture graph so the app
- * always renders end-to-end with zero credentials.
+ * Demo mode serves the fixture graph. Live mode reads Neo4j and surfaces
+ * connectivity/configuration failures instead of silently replaying fixtures.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { env, isDemoMode } from "@/lib/env";
+import { isDemoMode } from "@/lib/env";
 import { currentUser } from "@/lib/auth-server";
 import { fetchGraph } from "@/lib/neo4j";
 import { loadDemoGraph } from "@/lib/pipeline/conductor";
@@ -24,16 +24,11 @@ export async function GET(
 
   const { sessionId } = await ctx.params;
 
-  if (!isDemoMode()) {
-    try {
-      const graph = await fetchGraph(sessionId);
-      return NextResponse.json(graph);
-    } catch (err) {
-      if (env.DEBUG) console.error("[api/graph]", err);
-      // fall through to fixture
-    }
+  if (isDemoMode()) {
+    const { nodes, links } = loadDemoGraph();
+    return NextResponse.json({ nodes, links });
   }
 
-  const { nodes, links } = loadDemoGraph();
-  return NextResponse.json({ nodes, links });
+  const graph = await fetchGraph(sessionId);
+  return NextResponse.json(graph);
 }

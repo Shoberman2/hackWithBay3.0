@@ -5,13 +5,13 @@
  *   on first use.
  * - Aura Free: NO gds.* procedures. Algorithms run client-side
  *   (lib/algorithms.ts).
- * - DEMO MODE (!hasNeo4j()): read paths serve fixtures/demo-graph.json,
- *   writes become no-ops, so the app runs end-to-end with zero credentials.
+ * - DEMO MODE: read paths may serve fixtures/demo-graph.json and writes
+ *   become no-ops. Live mode requires real Neo4j credentials.
  */
 
 import neo4j from "neo4j-driver";
 import type { Driver } from "neo4j-driver";
-import { env, hasNeo4j } from "@/lib/env";
+import { env, hasNeo4j, neo4jConfigErrorMessage } from "@/lib/env";
 import type { GraphNode, GraphLink, InsightCard, NodeLabel, RelationshipType } from "@/lib/types";
 import demoGraphJson from "@/fixtures/demo-graph.json";
 
@@ -48,10 +48,7 @@ let connectivityVerified = false;
 /** Lazily create (or return) the singleton driver. Throws if !hasNeo4j(). */
 export function getDriver(): Driver {
   if (!hasNeo4j()) {
-    throw new Error(
-      "Neo4j credentials missing — demo mode is active; reads are served from fixtures. " +
-        "Set NEO4J_URI / NEO4J_USERNAME / NEO4J_PASSWORD for a live graph.",
-    );
+    throw new Error(neo4jConfigErrorMessage());
   }
   if (!driver) {
     driver = neo4j.driver(
@@ -116,8 +113,11 @@ export async function runRead<T = Record<string, unknown>>(
   params?: Record<string, unknown>,
 ): Promise<T[]> {
   if (!hasNeo4j()) {
-    if (env.DEBUG) console.warn("[neo4j] demo mode: runRead -> [] for:", cypher.slice(0, 120));
-    return [];
+    if (env.DEMO_MODE) {
+      if (env.DEBUG) console.warn("[neo4j] demo mode: runRead -> [] for:", cypher.slice(0, 120));
+      return [];
+    }
+    throw new Error(`Neo4j credentials missing for live read. ${neo4jConfigErrorMessage()}`);
   }
   await ensureConnectivity();
   const result = await getDriver().executeQuery(cypher, params ?? {}, {
@@ -136,8 +136,11 @@ export async function runWrite<T = Record<string, unknown>>(
   params?: Record<string, unknown>,
 ): Promise<T[]> {
   if (!hasNeo4j()) {
-    if (env.DEBUG) console.warn("[neo4j] demo mode: runWrite no-op for:", cypher.slice(0, 120));
-    return [];
+    if (env.DEMO_MODE) {
+      if (env.DEBUG) console.warn("[neo4j] demo mode: runWrite no-op for:", cypher.slice(0, 120));
+      return [];
+    }
+    throw new Error(`Neo4j credentials missing for live write. ${neo4jConfigErrorMessage()}`);
   }
   await ensureConnectivity();
   const result = await getDriver().executeQuery(cypher, params ?? {}, {
@@ -258,18 +261,64 @@ function rowToGraphLink(row: LinkRow): GraphLink {
   };
 }
 
+function filterGraphToSession(
+  sessionId: string,
+  nodes: GraphNode[],
+  links: GraphLink[],
+): { nodes: GraphNode[]; links: GraphLink[] } {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const ideaIds = nodes
+    .filter(
+      (node) =>
+        node.label === "Idea" &&
+        (node.session_id === sessionId ||
+          node.id === sessionId ||
+          node.id === `idea:${sessionId}`),
+    )
+    .map((node) => node.id);
+  if (ideaIds.length === 0) return { nodes, links };
+
+  const included = new Set<string>(ideaIds);
+  const queue = ideaIds.map((id) => ({ id, depth: 0 }));
+  for (let i = 0; i < queue.length; i++) {
+    const current = queue[i];
+    if (current.depth >= 4) continue;
+    for (const link of links) {
+      const touchesSource = [link.source, link.target].some(
+        (id) => byId.get(id)?.label === "Source",
+      );
+      if (touchesSource) continue;
+      const next =
+        link.source === current.id
+          ? link.target
+          : link.target === current.id
+            ? link.source
+            : null;
+      if (!next || included.has(next)) continue;
+      const node = byId.get(next);
+      if (!node || node.label === "Source") continue;
+      included.add(next);
+      queue.push({ id: next, depth: current.depth + 1 });
+    }
+  }
+
+  return {
+    nodes: nodes.filter((node) => included.has(node.id)),
+    links: links.filter(
+      (link) => included.has(link.source) && included.has(link.target),
+    ),
+  };
+}
+
 /**
  * Fetch the full session graph in react-force-graph shape. Source nodes
  * are excluded from the viz (each entity carries its source_url property).
  * In demo mode this returns the fixture graph.
- *
- * Note: the hackathon build keeps one graph per database, so sessionId is
- * currently not used as a filter.
  */
 export async function fetchGraph(
-  _sessionId: string,
+  sessionId: string,
 ): Promise<{ nodes: GraphNode[]; links: GraphLink[] }> {
-  if (!hasNeo4j()) {
+  if (!hasNeo4j() && env.DEMO_MODE) {
     const { nodes, links } = getDemoGraph();
     return { nodes, links };
   }
@@ -282,17 +331,16 @@ export async function fetchGraph(
      WHERE NOT a:Source AND NOT b:Source
      RETURN a.id AS source, b.id AS target, type(r) AS type, properties(r) AS props`,
   );
-  return {
-    nodes: nodeRows.map(rowToGraphNode),
-    links: linkRows.filter((l) => l.source && l.target).map(rowToGraphLink),
-  };
+  const nodes = nodeRows.map(rowToGraphNode);
+  const links = linkRows.filter((l) => l.source && l.target).map(rowToGraphLink);
+  return filterGraphToSession(sessionId, nodes, links);
 }
 
 /** Fetch the 1-hop neighborhood of a node (click-to-expand). */
 export async function fetchNeighborhood(
   nodeId: string,
 ): Promise<{ nodes: GraphNode[]; links: GraphLink[] }> {
-  if (!hasNeo4j()) {
+  if (!hasNeo4j() && env.DEMO_MODE) {
     const { nodes, links } = getDemoGraph();
     const hood = links.filter(
       (l) => l.source === nodeId || l.target === nodeId,

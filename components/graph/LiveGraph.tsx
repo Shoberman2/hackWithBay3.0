@@ -37,6 +37,7 @@ import type {
 } from "@/hooks/useGraphStream";
 import {
   COMMUNITY_TINTS,
+  companyLogoUrl,
   endpointId,
   linkKeyOf,
   NODE_COLORS,
@@ -46,6 +47,7 @@ type FGNode = NodeObject<GraphNode>;
 type FGLink = LinkObject<GraphNode, GraphLink>;
 type FGMethods = ForceGraphMethods<FGNode, FGLink>;
 type FGComponent = typeof import("react-force-graph-2d").default;
+type LogoCacheValue = HTMLImageElement | "loading" | "error";
 
 const LABEL_FONT = "Geist, ui-sans-serif, system-ui, sans-serif";
 
@@ -71,8 +73,10 @@ export default function LiveGraph({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [logoVersion, setLogoVersion] = useState(0);
   const lastClickRef = useRef<{ id: string; time: number }>({ id: "", time: 0 });
   const prevNodeCountRef = useRef(0);
+  const logoCacheRef = useRef<Map<string, LogoCacheValue>>(new Map());
 
   /* Client-only module load (the lib crashes if imported during SSR). */
   useEffect(() => {
@@ -97,6 +101,25 @@ export default function LiveGraph({
     setSize({ width: el.clientWidth, height: el.clientHeight });
     return () => observer.disconnect();
   }, []);
+
+  /* Load company favicons lazily for canvas rendering. */
+  useEffect(() => {
+    for (const node of data.nodes) {
+      const url = companyLogoUrl(node);
+      if (!url || logoCacheRef.current.has(url)) continue;
+      const img = new Image();
+      img.referrerPolicy = "no-referrer";
+      img.onload = () => {
+        logoCacheRef.current.set(url, img);
+        setLogoVersion((v) => v + 1);
+      };
+      img.onerror = () => {
+        logoCacheRef.current.set(url, "error");
+      };
+      logoCacheRef.current.set(url, "loading");
+      img.src = url;
+    }
+  }, [data.nodes]);
 
   /* Derived indexes -- cheap at hackathon graph sizes. */
   const degree = useMemo(() => {
@@ -161,6 +184,7 @@ export default function LiveGraph({
 
   const paintNode = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, scale: number) => {
+      void logoVersion;
       const id = String(node.id ?? "");
       const x = node.x ?? 0;
       const y = node.y ?? 0;
@@ -185,11 +209,33 @@ export default function LiveGraph({
         ctx.fill();
       }
 
-      // Node body.
-      ctx.beginPath();
-      ctx.arc(x, y, radius, 0, 2 * Math.PI);
-      ctx.fillStyle = NODE_COLORS[node.label as NodeLabel] ?? "#9CA3AF";
-      ctx.fill();
+      // Node body. Company nodes use a favicon when one can be loaded.
+      const logoUrl = companyLogoUrl(node as GraphNode);
+      const logo = logoUrl ? logoCacheRef.current.get(logoUrl) : null;
+      if (
+        logo instanceof HTMLImageElement &&
+        logo.complete &&
+        logo.naturalWidth > 0
+      ) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        ctx.clip();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
+        ctx.drawImage(logo, x - radius, y - radius, radius * 2, radius * 2);
+        ctx.restore();
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        ctx.strokeStyle = "rgba(17, 17, 17, 0.16)";
+        ctx.lineWidth = Math.max(1 / scale, 0.35);
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, 2 * Math.PI);
+        ctx.fillStyle = NODE_COLORS[node.label as NodeLabel] ?? "#9CA3AF";
+        ctx.fill();
+      }
 
       // Selection ring.
       if (selectedId === id) {
@@ -224,7 +270,15 @@ export default function LiveGraph({
 
       ctx.globalAlpha = 1;
     },
-    [radiusFor, hoverId, hoverHood, highlightNodes, selectedId, topPagerankId],
+    [
+      radiusFor,
+      hoverId,
+      hoverHood,
+      highlightNodes,
+      selectedId,
+      topPagerankId,
+      logoVersion,
+    ],
   );
 
   const paintPointerArea = useCallback(

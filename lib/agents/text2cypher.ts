@@ -64,12 +64,16 @@ let cachedSchema: string | null = null;
 
 async function getSchema(): Promise<string> {
   if (cachedSchema) return cachedSchema;
-  if (!isDemoMode() && hasNeo4j()) {
+  if (!isDemoMode()) {
+    if (!hasNeo4j()) {
+      throw new Error("Neo4j credentials missing for text-to-Cypher");
+    }
     try {
       cachedSchema = await getSchemaString();
       return cachedSchema;
     } catch {
-      // schema call unavailable: fixture schema below
+      cachedSchema = FIXTURE_SCHEMA;
+      return cachedSchema;
     }
   }
   cachedSchema = FIXTURE_SCHEMA;
@@ -361,10 +365,8 @@ export async function answerQuestion(
     };
   } catch (error) {
     if (env.DEBUG) {
-      console.error("[text2cypher] falling back to fixture answer:", error);
+      console.error("[text2cypher] live answer failed:", error);
     }
-    // Gateway or database unavailable: deterministic graph answer so the
-    // demo never dies on stage.
-    return demoAnswer(question, graph);
+    throw error;
   }
 }

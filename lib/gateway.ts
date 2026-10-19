@@ -5,10 +5,9 @@
  *   with Authorization: Bearer {BUTTERBASE_AI_KEY}. No raw provider keys, ever.
  * - Retries once on 429/5xx/network failure.
  * - JSON mode instructs the model, parses, and does one repair retry.
- * - When env.DEMO_MODE or !hasGateway(): returns deterministic canned
- *   completions keyed by the `purpose` hint (falling back to content
- *   sniffing) so onboarding, extraction, Q&A, and the report all work
- *   with zero credentials.
+ * - When env.DEMO_MODE: returns deterministic canned completions keyed by
+ *   the `purpose` hint. In live mode, missing keys or exhausted credits
+ *   throw instead of pretending a model answered.
  */
 
 import { env, hasGateway } from "@/lib/env";
@@ -67,7 +66,7 @@ function debugLog(...args: unknown[]): void {
 }
 
 function gatewayInDemoMode(): boolean {
-  return env.DEMO_MODE || !hasGateway();
+  return env.DEMO_MODE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -150,15 +149,13 @@ export async function chat(
     debugLog("demo completion, purpose:", options.purpose ?? "(sniffed)");
     return cannedCompletion(messages, options);
   }
-  // Live gateway with a safety net: if the real Butterbase call fails
-  // (e.g. no credits yet, provider hiccup), fall back to the canned
-  // completion so onboarding, Q&A, and the report never dead-end.
-  try {
-    return await requestCompletion(messages, options);
-  } catch (error) {
-    debugLog("gateway call failed, using canned fallback:", (error as Error).message);
-    return cannedCompletion(messages, options);
+  if (!hasGateway()) {
+    throw new GatewayError(
+      "Butterbase AI gateway is not configured (BUTTERBASE_AI_KEY)",
+      "http",
+    );
   }
+  return requestCompletion(messages, options);
 }
 
 const JSON_INSTRUCTION =

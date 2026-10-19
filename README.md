@@ -1,6 +1,6 @@
 # Rivalry: Competitive Landscape Graphs for Idea-Stage Founders
 
-**HackwithBay 3.0 submission. Built on Neo4j, RocketRide Cloud, and Butterbase.**
+**Built on Neo4j, RocketRide Cloud, and Butterbase.**
 
 ---
 
@@ -34,7 +34,7 @@ This takes days, is instantly stale, and the flat format hides the most importan
 
 ### What makes it graph-native, not a database with extra steps
 
-The judging criteria explicitly penalize using Neo4j as a glorified key-value store. Rivalry's core queries are traversals and algorithms that have no clean SQL equivalent:
+A graph-native product cannot use Neo4j as a glorified key-value store. Rivalry's core queries are traversals and algorithms that have no clean SQL equivalent:
 
 - **Shared-investor paths.** Two "competitors" connected through a common lead investor is a 2-hop traversal and a major strategic signal (they will not both die; one may get merged into the other).
 - **Founder lineage.** WORKED_AT edges reveal talent clusters: "four founders in this space came out of Handshake." That is a pattern query across relationships, invisible in rows.
@@ -88,7 +88,7 @@ The judging criteria explicitly penalize using Neo4j as a glorified key-value st
 
 `INVESTED_IN` is kept as a direct convenience edge (shared-investor traversals stay 2-hop); `FundingRound` nodes carry the full history — round type, amount, date, participants. `WebsiteSnapshot` chains give positioning history ("this competitor pivoted messaging twice in 18 months"). `Post` nodes give founder activity timelines. `MoatClaim` is derived intelligence — an LLM analysis pass over each company's accumulated evidence — and must cite `Source` nodes like any other fact. `TractionSignal` captures user-base indicators over time.
 
-Every claim in the graph traces back to a Source node. No orphan facts. This matters for trust and for the demo ("click any edge, see where it came from").
+Every claim in the graph traces back to a Source node. No orphan facts. This matters for trust: click any edge, see where it came from.
 
 ## 5. Architecture and Stack Mapping
 
@@ -96,7 +96,7 @@ All three mandatory technologies are load-bearing. None are bolted on.
 
 ### Neo4j (mandatory)
 
-The graph above IS the product. The agent answers user questions by generating Cypher, running traversals, and executing GDS algorithms (community detection, centrality). Neo4j Aura free tier for the hackathon.
+The graph above IS the product. The agent answers user questions by generating Cypher, running traversals, and executing graph algorithms (community detection, centrality) over the live Neo4j edge list.
 
 ### RocketRide Cloud (mandatory)
 
@@ -109,7 +109,7 @@ Hosts the ingestion and enrichment pipeline as a managed production endpoint the
 5. **Graph write.** Batched Cypher MERGE statements into Neo4j.
 6. **Insight pass.** Trigger GDS algorithms, write derived edges (clusters, centrality scores) back.
 
-Built locally in the RocketRide VS Code extension, deployed to cloud.rocketride.ai. A local-only pipeline fails the mandatory requirement, so deployment happens early, not at 4pm.
+Deployed as a managed RocketRide Cloud pipeline. The app sends extraction batches to the deployed project/source at runtime; local pipeline files are for authoring and validation only.
 
 ### Butterbase (mandatory)
 
@@ -128,7 +128,7 @@ Could give the agent a sandbox to run ad-hoc analysis scripts over exported grap
 
 ## 6. Data Sources
 
-Chosen entirely for being scriptable in an afternoon without fighting anti-bot systems:
+Chosen for high signal, public access, and reliable automation:
 
 | Source | What it provides | Access |
 |---|---|---|
@@ -153,11 +153,11 @@ Chosen entirely for being scriptable in an afternoon without fighting anti-bot s
 
 ## 7. Scope Discipline
 
-What is IN for the hackathon:
+What is IN for the initial product:
 
 - One polished end-to-end flow: idea → onboarding → live graph → agent Q&A → paid report
-- One or two pre-warmed demo verticals (internship platforms, plus one backup) with the pipeline already run so the demo cannot die on stage
-- Live incremental pipeline run for one fresh query during the demo, with the pre-warmed graph as fallback
+- One or two pre-warmed verticals (internship platforms, plus one backup) with the pipeline already run
+- Live incremental pipeline runs for fresh queries
 - 20 to 40 companies per vertical. Depth of connection beats breadth of coverage
 
 What is OUT:
@@ -170,7 +170,7 @@ What is OUT:
 
 1. **Cold open (20s).** "Every founder starts with 40 Chrome tabs and a spreadsheet. Spreadsheets can't show relationships. Relationships are the intelligence."
 2. **Type the idea (20s).** "internship platform." Answer 3 onboarding questions live.
-3. **The moment (60s).** Graph builds on screen. Companies, founders, investors, features connecting in real time. This is the visual judges remember.
+3. **The moment (60s).** Graph builds on screen. Companies, founders, investors, features connecting in real time. This is the visual users remember.
 4. **Graph reasoning (60s).** Ask two questions that showcase traversal: "which competitors share investors" (path lights up), "where is the white space" (community detection result, empty cluster highlighted).
 5. **Close (20s).** Click "generate full report," hit the Butterbase paywall, pay, report renders. All three mandatory technologies shown load-bearing in one flow.
 
@@ -178,8 +178,8 @@ What is OUT:
 
 - **Live pipeline on stage.** Ingestion latency is unpredictable. Mitigation: pre-warmed graphs, and the "live" run streams into an already-rich graph so even a slow pipeline shows movement.
 - **Entity extraction quality.** LLM extraction will hallucinate or misattribute. Mitigation: every fact carries a Source edge, extraction prompt requires citations, low-confidence facts render visually distinct.
-- **This is a one-shot product.** As a business, idea-stage founders use this once and they are broke. Retention is near zero. That is fine for a hackathon and honestly fine for the one-time-payment model the Butterbase requirement forces anyway. Do not pitch it as a SaaS with recurring revenue; pitch it as the first tool in the founder journey.
-- **Graph washing.** Biggest disqualification risk per the judging criteria. Mitigation is baked into the product: the headline demo moments (shared investors, white space, lineage) are literally impossible without traversal.
+- **This is a one-shot product.** Idea-stage founders may use this intensely at the beginning of a company and then move on. The business should be priced and packaged as the first tool in the founder journey, not as a daily monitoring SaaS.
+- **Graph washing.** The product must avoid being a database with a network visualization bolted on. Mitigation is baked into the core moments: shared investors, white space, and founder lineage are all traversal-native.
 
 ## 10. Name
 

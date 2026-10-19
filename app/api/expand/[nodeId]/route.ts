@@ -3,12 +3,12 @@
  * { nodes, links }. The Cypher itself lives in lib/neo4j.fetchNeighborhood
  * (parameterized — never concatenated).
  *
- * Demo mode (or any Neo4j failure) computes the 1-hop neighborhood from
- * the fixture graph instead.
+ * Demo mode computes the 1-hop neighborhood from the fixture graph. Live
+ * mode reads Neo4j and surfaces connectivity/configuration failures.
  */
 
 import { NextResponse, type NextRequest } from "next/server";
-import { env, isDemoMode } from "@/lib/env";
+import { isDemoMode } from "@/lib/env";
 import { currentUser } from "@/lib/auth-server";
 import { fetchNeighborhood } from "@/lib/neo4j";
 import { loadDemoGraph } from "@/lib/pipeline/conductor";
@@ -44,15 +44,10 @@ export async function GET(
   const { nodeId: rawNodeId } = await ctx.params;
   const nodeId = decodeURIComponent(rawNodeId);
 
-  if (!isDemoMode()) {
-    try {
-      const neighborhood = await fetchNeighborhood(nodeId);
-      return NextResponse.json(neighborhood);
-    } catch (err) {
-      if (env.DEBUG) console.error("[api/expand]", err);
-      // fall through to fixture
-    }
+  if (isDemoMode()) {
+    return NextResponse.json(fixtureNeighborhood(nodeId));
   }
 
-  return NextResponse.json(fixtureNeighborhood(nodeId));
+  const neighborhood = await fetchNeighborhood(nodeId);
+  return NextResponse.json(neighborhood);
 }

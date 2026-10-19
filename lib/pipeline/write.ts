@@ -11,8 +11,8 @@
  *   path pattern.
  * - Returns the written entities in react-force-graph shape so the
  *   conductor can stream them to the client without a re-read.
- * - Demo mode (!hasNeo4j()): skips the DB round-trips but still returns
- *   the graph-shaped result so the streaming path works without creds.
+ * - Demo mode: skips the DB round-trips but still returns the graph-shaped
+ *   result so the streaming path works without creds.
  */
 
 import fs from "node:fs";
@@ -273,7 +273,7 @@ function sanitizeProps(row: EntityRow): Record<string, unknown> {
 
 /** MERGE the session's Idea node. Idempotent. */
 export async function writeIdea(idea: Idea & { id?: string }): Promise<GraphNode> {
-  const id = idea.id ?? `idea:${slugify(idea.text)}`;
+  const id = idea.id ?? `idea:${slugify(idea.session_id || idea.text)}`;
   const props = sanitizeProps({ ...idea, id, name: idea.text });
   await runWrite(
     `MERGE (i:Idea {session_id: $session_id}) SET i += $props`,

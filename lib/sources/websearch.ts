@@ -97,6 +97,7 @@ export async function webSearchClaims(question: string): Promise<WebClaim[]> {
     return [];
   } catch (err) {
     debugLog("websearch failed", err);
+    if (!isDemoMode()) throw err;
     return [];
   }
 }

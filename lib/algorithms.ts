@@ -100,8 +100,11 @@ export function assignGraphMetrics(
 /** Persist computed metrics back to Neo4j node properties. */
 export async function writeMetricsBack(nodes: GraphNode[]): Promise<void> {
   if (!hasNeo4j()) {
-    if (env.DEBUG) console.warn("[algorithms] demo mode: writeMetricsBack no-op");
-    return;
+    if (env.DEMO_MODE) {
+      if (env.DEBUG) console.warn("[algorithms] demo mode: writeMetricsBack no-op");
+      return;
+    }
+    throw new Error("Neo4j credentials missing for live metric writes");
   }
   const rows = nodes.map((n) => ({
     id: n.id,
@@ -294,7 +297,7 @@ function summarize(nodes: GraphNode[], insights: InsightCard[]): InsightPassResu
  * cards. In DEMO MODE returns values straight from the fixture.
  */
 export async function runInsightPass(sessionId: string): Promise<InsightPassResult> {
-  if (env.DEMO_MODE || !hasNeo4j()) {
+  if (env.DEMO_MODE) {
     const { nodes, insights } = getDemoGraph();
     return summarize(nodes, insights);
   }

@@ -4,7 +4,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import type { OnboardingResult } from "@/lib/types";
-import { env } from "@/lib/env";
+
+const ALLOW_DEMO_SESSION_FALLBACK =
+  process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+const USE_LOCAL_QUESTIONNAIRE_FALLBACK = true;
+const AGENT_TIMEOUT_MS = 8_000;
+const POST_TIMEOUT_MS = 15_000;
 
 /* ------------------------------------------------------------------ */
 /* Agent wire shapes (proposed contract for POST /api/agent)           */
@@ -22,8 +27,8 @@ interface QA {
 
 /**
  * Expected response from POST /api/agent { mode: "onboarding", idea, answers }.
- * Until the agent team ships the route, any failure or unexpected shape
- * drops the interview to the local fallback flow below.
+ * If the agent is slow or unavailable, the UI falls back to the deterministic
+ * questionnaire and still sends the real idea/search terms to the pipeline.
  */
 interface AgentOnboardingResponse {
   done: boolean;
@@ -73,7 +78,11 @@ function buildLocalResult(idea: string, answers: QA[]): OnboardingResult {
   };
 }
 
-async function postJson<T>(url: string, body: unknown, timeoutMs = 10000): Promise<T> {
+async function postJson<T>(
+  url: string,
+  body: unknown,
+  timeoutMs = POST_TIMEOUT_MS,
+): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -115,6 +124,7 @@ export default function Interview({ idea, onExit }: InterviewProps) {
   const [picked, setPicked] = useState<string | null>(null);
   // Once the agent route fails we stay on the local flow for the session.
   const agentAlive = useRef(true);
+  const initialAdvanceStarted = useRef(false);
   const retryRef = useRef<() => void>(() => {});
 
   const current: InterviewQuestion | undefined = history[answers.length];
@@ -136,16 +146,15 @@ export default function Interview({ idea, onExit }: InterviewProps) {
         );
         id = res.id ?? res.sessionId ?? "demo";
       } catch (err) {
-        if (env.DEBUG) console.error("session start failed", err);
-        if (agentAlive.current) {
-          // A real backend answered the interview; a session failure here
-          // is a genuine error, not a demo-mode condition.
+        console.error("session start failed", err);
+        if (ALLOW_DEMO_SESSION_FALLBACK && !agentAlive.current) {
+          id = "demo";
+        } else {
           setError("Could not start the session.");
           retryRef.current = () => void startSession(finalAnswers, result);
           setPhase("error");
           return;
         }
-        // Demo insurance: no backend, route to the fixture session.
       }
       // Forward the refined idea/tags/terms in the URL: useGraphStream
       // passes them to the pipeline stream so a live run searches the
@@ -174,11 +183,15 @@ export default function Interview({ idea, onExit }: InterviewProps) {
 
       if (agentAlive.current) {
         try {
-          const res = await postJson<AgentOnboardingResponse>("/api/agent", {
-            mode: "onboarding",
-            idea,
-            answers: currentAnswers,
-          });
+          const res = await postJson<AgentOnboardingResponse>(
+            "/api/agent",
+            {
+              mode: "onboarding",
+              idea,
+              answers: currentAnswers,
+            },
+            AGENT_TIMEOUT_MS,
+          );
           if (res.done) {
             void startSession(currentAnswers, res.result);
             return;
@@ -196,7 +209,14 @@ export default function Interview({ idea, onExit }: InterviewProps) {
           }
           throw new Error("unexpected agent response shape");
         } catch (err) {
-          if (env.DEBUG) console.error("onboarding agent unavailable, using local flow", err);
+          if (!USE_LOCAL_QUESTIONNAIRE_FALLBACK) {
+            console.error("onboarding agent unavailable", err);
+            setError("The onboarding agent is unavailable.");
+            retryRef.current = () => void advance(currentAnswers);
+            setPhase("error");
+            return;
+          }
+          console.warn("onboarding agent unavailable; using local questionnaire", err);
           agentAlive.current = false;
         }
       }
@@ -218,6 +238,8 @@ export default function Interview({ idea, onExit }: InterviewProps) {
 
   // First question on mount.
   useEffect(() => {
+    if (initialAdvanceStarted.current) return;
+    initialAdvanceStarted.current = true;
     retryRef.current = () => void advance([]);
     void advance([]);
     // eslint-disable-next-line react-hooks/exhaustive-deps

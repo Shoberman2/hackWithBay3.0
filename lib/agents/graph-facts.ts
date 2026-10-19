@@ -26,18 +26,11 @@ export function getFixtureGraph(): FixtureGraph {
 }
 
 /**
- * The graph for a session: live Neo4j when configured, fixture otherwise.
- * Falls back to the fixture if the live read fails (demo insurance).
+ * The graph for a session: live Neo4j unless explicit demo mode is on.
  */
 export async function getSessionGraph(sessionId: string): Promise<SessionGraph> {
-  if (!isDemoMode()) {
-    try {
-      return await fetchGraph(sessionId);
-    } catch {
-      // fall through to fixture
-    }
-  }
-  return { nodes: fixture.nodes, links: fixture.links };
+  if (isDemoMode()) return { nodes: fixture.nodes, links: fixture.links };
+  return fetchGraph(sessionId);
 }
 
 function byId(graph: SessionGraph): Map<string, GraphNode> {

@@ -28,12 +28,15 @@ function loadEnvLocal(): void {
 async function main(): Promise<void> {
   loadEnvLocal();
   // Import after env is loaded (lib/env.ts snapshots process.env on import).
-  const { hasNeo4j } = await import("../lib/env");
+  const { env, hasNeo4j, neo4jConfigErrorMessage } = await import("../lib/env");
   const { applySchema } = await import("../lib/pipeline/write");
   const { runRead, closeDriver } = await import("../lib/neo4j");
 
   if (!hasNeo4j()) {
-    console.log("[apply-schema] DEMO MODE (no Neo4j credentials) — nothing to apply.");
+    if (!env.DEMO_MODE) {
+      throw new Error(neo4jConfigErrorMessage());
+    }
+    console.log("[apply-schema] DEMO MODE (no Neo4j credentials) - nothing to apply.");
     return;
   }
 

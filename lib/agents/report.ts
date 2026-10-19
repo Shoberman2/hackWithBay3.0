@@ -135,7 +135,7 @@ Rules:
 }
 
 /* ------------------------------------------------------------------ */
-/* Deterministic renderer (demo mode + gateway fallback)               */
+/* Deterministic renderer (demo mode)                                  */
 /* ------------------------------------------------------------------ */
 
 function renderDigestMarkdown(digest: ReportDigest): string {
@@ -235,15 +235,12 @@ export async function generateReport(sessionId: string): Promise<string> {
   if (isDemoMode()) {
     return renderDigestMarkdown(digest);
   }
-  try {
-    const markdown = await chat(buildReportPrompt(digest), {
-      temperature: 0.3,
-      maxTokens: 3000,
-    });
-    return markdown.trim().length > 0
-      ? markdown
-      : renderDigestMarkdown(digest);
-  } catch {
-    return renderDigestMarkdown(digest);
+  const markdown = await chat(buildReportPrompt(digest), {
+    temperature: 0.3,
+    maxTokens: 3000,
+  });
+  if (markdown.trim().length === 0) {
+    throw new Error("Butterbase AI gateway returned an empty report");
   }
+  return markdown;
 }

@@ -29,7 +29,7 @@ function loadEnvLocal(): void {
 
 async function main(): Promise<void> {
   loadEnvLocal();
-  const { hasNeo4j } = await import("../lib/env");
+  const { env, hasNeo4j, neo4jConfigErrorMessage } = await import("../lib/env");
   const { getDemoGraph, getDriver, runRead, closeDriver } = await import("../lib/neo4j");
   const { linkKey } = await import("../lib/types");
 
@@ -40,7 +40,10 @@ async function main(): Promise<void> {
   };
 
   if (!hasNeo4j()) {
-    console.log("[smoke] DEMO MODE (no Neo4j credentials) — validating fixture integrity instead.\n");
+    if (!env.DEMO_MODE) {
+      throw new Error(neo4jConfigErrorMessage());
+    }
+    console.log("[smoke] DEMO MODE (no Neo4j credentials) - validating fixture integrity instead.\n");
     const { nodes, links, insights } = getDemoGraph();
     const ids = new Set(nodes.map((n) => n.id));
     const dangling = links.filter((l) => !ids.has(l.source) || !ids.has(l.target));

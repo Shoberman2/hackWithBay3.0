@@ -15,6 +15,13 @@ export const dynamic = "force-dynamic";
 
 const PING_INTERVAL_MS = 15_000;
 
+function publicErrorMessage(err: unknown): string {
+  if (err instanceof Error && err.message.includes("Neo4j credentials missing")) {
+    return err.message;
+  }
+  return "Pipeline error; stream ended early";
+}
+
 function csv(value: string | null): string[] {
   return (value ?? "")
     .split(",")
@@ -64,10 +71,17 @@ export async function GET(req: NextRequest): Promise<Response> {
         }
       } catch (err) {
         if (env.DEBUG) console.error("[pipeline/stream]", err);
+        const message = publicErrorMessage(err);
+        send("pipeline-error", {
+          type: "pipeline-error",
+          stage: "extract",
+          message,
+        });
         send("status", {
           type: "status",
           stage: "extract",
-          message: "Pipeline error; stream ended early",
+          error: true,
+          message,
         });
       } finally {
         clearInterval(ping);

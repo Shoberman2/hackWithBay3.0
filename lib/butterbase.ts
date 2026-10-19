@@ -7,10 +7,10 @@
  *   the installed package source) is exactly the REST surface from the plan:
  *   POST /v1/{app_id}/billing/products, POST /v1/{app_id}/billing/purchase,
  *   GET /v1/{app_id}/billing/orders/{id}.
- * - When env.DEMO_MODE or !hasButterbase(): an in-memory store with a seeded
- *   demo user backs the same function surface, and checkout orders flip to
- *   "paid" ~3 seconds after creation. This fake settlement is gated on demo
- *   mode only — the production path always polls the real order.
+ * - When env.DEMO_MODE: an in-memory store with a seeded demo user backs the
+ *   same function surface, and checkout orders flip to "paid" after a short
+ *   delay. In live mode, missing tables/keys throw instead of silently falling
+ *   back to memory.
  */
 
 import {
@@ -41,6 +41,8 @@ export interface PurchaseSession {
   checkoutUrl: string;
   /** True when this is the demo-mode fake checkout (no redirect). */
   demo: boolean;
+  /** True when this is a free persisted unlock, not a Stripe checkout. */
+  free?: boolean;
 }
 
 export type OrderStatus = "pending" | "paid" | "failed" | "refunded";
@@ -75,6 +77,18 @@ export interface ReportRow {
   created_at: string;
 }
 
+export interface UpdateSubscriptionRow {
+  session_id: string;
+  user_id?: string;
+  email?: string;
+  industry: string;
+  cadence: "weekly";
+  enabled: boolean;
+  last_sent_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 const PRODUCT_NAME = "Full Landscape Report";
 const PRODUCT_PRICE_CENTS = 900;
 const DEMO_SETTLE_MS = 3000;
@@ -86,22 +100,7 @@ function debugLog(...args: unknown[]): void {
 }
 
 function butterbaseInDemoMode(): boolean {
-  return env.DEMO_MODE || !hasButterbase();
-}
-
-/**
- * Run a live Butterbase Data API call; if it throws (e.g. the app has not
- * provisioned this table yet — an admin-only dashboard step), fall back to
- * the in-memory store so the flow never 500s. Auth, billing, and the AI
- * gateway stay fully live; only unprovisioned tables degrade.
- */
-async function liveOrDemo<T>(live: () => Promise<T>, demo: () => T): Promise<T> {
-  try {
-    return await live();
-  } catch (err) {
-    debugLog("live Data API call fell back to in-memory store:", (err as Error).message);
-    return demo();
-  }
+  return env.DEMO_MODE;
 }
 
 /* ------------------------------------------------------------------ */
@@ -123,6 +122,7 @@ interface DemoStore {
   purchases: Map<string, PurchaseRow>; // session_id -> row
   orders: Map<string, DemoOrder>; // order_id -> order
   reports: Map<string, ReportRow>; // session_id -> row
+  updateSubscriptions: Map<string, UpdateSubscriptionRow>; // session_id -> row
 }
 
 const DEMO_USER: ButterbaseUser = { id: "demo-user", email: "demo@rivalry.app" };
@@ -136,6 +136,7 @@ function makeDemoStore(): DemoStore {
     purchases: new Map(),
     orders: new Map(),
     reports: new Map(),
+    updateSubscriptions: new Map(),
   };
   store.users.set(DEMO_USER.email, {
     ...DEMO_USER,
@@ -309,45 +310,41 @@ export async function upsertSession(
     demoUpsert();
     return;
   }
-  await liveOrDemo(async () => {
-    const client = getButterbase();
-    const existing = await client
+  const client = getButterbase();
+  const existing = await client
+    .from<SessionRow>("sessions")
+    .select("session_id")
+    .eq("session_id", sessionId);
+  if (existing.error) throw existing.error;
+  if (existing.data && existing.data.length > 0) {
+    const { error } = await client
       .from<SessionRow>("sessions")
-      .select("session_id")
+      .update({ idea, tags, status })
       .eq("session_id", sessionId);
-    if (existing.error) throw existing.error;
-    if (existing.data && existing.data.length > 0) {
-      const { error } = await client
-        .from<SessionRow>("sessions")
-        .update({ idea, tags, status })
-        .eq("session_id", sessionId);
-      if (error) throw error;
-    } else {
-      const { error } = await client.from<SessionRow>("sessions").insert({
-        session_id: sessionId,
-        user_id: userId,
-        idea,
-        tags,
-        status,
-        created_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-    }
-  }, demoUpsert);
+    if (error) throw error;
+  } else {
+    const { error } = await client.from<SessionRow>("sessions").insert({
+      session_id: sessionId,
+      user_id: userId,
+      idea,
+      tags,
+      status,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  }
 }
 
 export async function getSession(sessionId: string): Promise<SessionRow | null> {
   const demoGet = () => demoStore().sessions.get(sessionId) ?? null;
   if (butterbaseInDemoMode()) return demoGet();
-  return liveOrDemo(async () => {
-    const { data, error } = await getButterbase()
-      .from<SessionRow>("sessions")
-      .select("*")
-      .eq("session_id", sessionId)
-      .limit(1);
-    if (error) throw error;
-    return data?.[0] ?? null;
-  }, demoGet);
+  const { data, error } = await getButterbase()
+    .from<SessionRow>("sessions")
+    .select("*")
+    .eq("session_id", sessionId)
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] ?? null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -359,14 +356,12 @@ export async function getQuestionCount(sessionId: string): Promise<number> {
   const demoCount = () =>
     demoStore().questions.filter((q) => q.session_id === sessionId).length;
   if (butterbaseInDemoMode()) return demoCount();
-  return liveOrDemo(async () => {
-    const { data, error } = await getButterbase()
-      .from<QuestionRow>("questions")
-      .select("session_id")
-      .eq("session_id", sessionId);
-    if (error) throw error;
-    return data?.length ?? 0;
-  }, demoCount);
+  const { data, error } = await getButterbase()
+    .from<QuestionRow>("questions")
+    .select("session_id")
+    .eq("session_id", sessionId);
+  if (error) throw error;
+  return data?.length ?? 0;
 }
 
 export async function recordQuestion(
@@ -389,10 +384,8 @@ export async function recordQuestion(
     demoPush();
     return;
   }
-  await liveOrDemo(async () => {
-    const { error } = await getButterbase().from<QuestionRow>("questions").insert(row);
-    if (error) throw error;
-  }, demoPush);
+  const { error } = await getButterbase().from<QuestionRow>("questions").insert(row);
+  if (error) throw error;
 }
 
 /* ------------------------------------------------------------------ */
@@ -424,8 +417,9 @@ async function ensureProduct(client: ButterbaseClient): Promise<string> {
 }
 
 /**
- * Start a report purchase for a session. Returns the Stripe Checkout URL
- * (or a marker fake order in demo mode that settles after ~3 seconds).
+ * Start a report unlock for a session. Returns a Stripe Checkout URL in
+ * product mode, a persisted free unlock in FREE_REPORT_UNLOCK mode, or a
+ * short-lived in-memory demo order in explicit demo mode.
  */
 export async function createPurchase(
   sessionId: string,
@@ -445,34 +439,40 @@ export async function createPurchase(
   };
   if (butterbaseInDemoMode()) return demoCreate();
 
-  return liveOrDemo(async () => {
-    const client = getButterbase(accessToken);
-    const productId = await ensureProduct(client);
-    const returnUrl = origin
-      ? `${origin}/session/${encodeURIComponent(sessionId)}?checkout=return`
-      : undefined;
-    const { data, error } = await client.billing.purchase({
-      productId,
-      successUrl: returnUrl,
-      cancelUrl: returnUrl,
+  const client = getButterbase(accessToken);
+
+  if (env.FREE_REPORT_UNLOCK) {
+    const orderId = `free-order-${Math.random().toString(36).slice(2, 10)}`;
+    const { error } = await client.from<PurchaseRow>("purchases").insert({
+      session_id: sessionId,
+      order_id: orderId,
+      status: "paid",
+      created_at: new Date().toISOString(),
     });
-    if (error || !data) {
-      throw error ?? new Error("Purchase returned no data");
-    }
-    // Best-effort receipt row; a missing `purchases` table must not discard
-    // a real Stripe checkout URL.
-    try {
-      await client.from<PurchaseRow>("purchases").insert({
-        session_id: sessionId,
-        order_id: data.orderId,
-        status: "pending",
-        created_at: new Date().toISOString(),
-      });
-    } catch (err) {
-      debugLog("purchases insert skipped:", (err as Error).message);
-    }
-    return { orderId: data.orderId, checkoutUrl: data.url, demo: false };
-  }, demoCreate);
+    if (error) throw error;
+    return { orderId, checkoutUrl: "", demo: false, free: true };
+  }
+
+  const productId = await ensureProduct(client);
+  const returnUrl = origin
+    ? `${origin}/session/${encodeURIComponent(sessionId)}?checkout=return`
+    : undefined;
+  const { data, error } = await client.billing.purchase({
+    productId,
+    successUrl: returnUrl,
+    cancelUrl: returnUrl,
+  });
+  if (error || !data) {
+    throw error ?? new Error("Purchase returned no data");
+  }
+  const { error: insertError } = await client.from<PurchaseRow>("purchases").insert({
+    session_id: sessionId,
+    order_id: data.orderId,
+    status: "pending",
+    created_at: new Date().toISOString(),
+  });
+  if (insertError) throw insertError;
+  return { orderId: data.orderId, checkoutUrl: data.url, demo: false };
 }
 
 function normalizeOrderStatus(status: string): OrderStatus {
@@ -490,13 +490,12 @@ export async function getOrderStatus(orderId: string): Promise<OrderStatus> {
     }
     return order.status;
   };
-  // Demo-created orders (billing fell back) live in the in-memory store.
+  if (orderId.startsWith("free-order-")) return "paid";
+  // Demo-created orders live in the in-memory store.
   if (butterbaseInDemoMode() || orderId.startsWith("demo-order-")) return demoStatus();
-  return liveOrDemo(async () => {
-    const { data, error } = await getButterbase().billing.getOrder(orderId);
-    if (error || !data) throw error ?? new Error("Order lookup returned no data");
-    return normalizeOrderStatus((data as Order).status);
-  }, demoStatus);
+  const { data, error } = await getButterbase().billing.getOrder(orderId);
+  if (error || !data) throw error ?? new Error("Order lookup returned no data");
+  return normalizeOrderStatus((data as Order).status);
 }
 
 /** Mark a session's purchase paid (called when the order settles). */
@@ -516,32 +515,26 @@ export async function markPurchasePaid(
     demoMark();
     return;
   }
-  await liveOrDemo(async () => {
-    const { error } = await getButterbase()
-      .from<PurchaseRow>("purchases")
-      .update({ status: "paid" })
-      .eq("session_id", sessionId)
-      .eq("order_id", orderId);
-    if (error) throw error;
-  }, demoMark);
+  const { error } = await getButterbase()
+    .from<PurchaseRow>("purchases")
+    .update({ status: "paid" })
+    .eq("session_id", sessionId)
+    .eq("order_id", orderId);
+  if (error) throw error;
 }
 
 /** Paywall check: does this session have a settled purchase? */
 export async function hasPurchase(sessionId: string): Promise<boolean> {
   const demoHas = () => demoStore().purchases.get(sessionId)?.status === "paid";
   if (butterbaseInDemoMode()) return demoHas();
-  return liveOrDemo(async () => {
-    const { data, error } = await getButterbase()
-      .from<PurchaseRow>("purchases")
-      .select("order_id")
-      .eq("session_id", sessionId)
-      .eq("status", "paid")
-      .limit(1);
-    if (error) throw error;
-    // A live table with no row still means "not purchased"; but if the
-    // paid state was tracked in-memory (demo fallback settle), honor it.
-    return Boolean(data && data.length > 0) || demoHas();
-  }, demoHas);
+  const { data, error } = await getButterbase()
+    .from<PurchaseRow>("purchases")
+    .select("order_id")
+    .eq("session_id", sessionId)
+    .eq("status", "paid")
+    .limit(1);
+  if (error) throw error;
+  return Boolean(data && data.length > 0);
 }
 
 /* ------------------------------------------------------------------ */
@@ -560,27 +553,97 @@ export async function saveReport(sessionId: string, markdown: string): Promise<v
     demoSave();
     return;
   }
-  await liveOrDemo(async () => {
-    const { error } = await getButterbase().from<ReportRow>("reports").insert({
-      session_id: sessionId,
-      markdown,
-      created_at: new Date().toISOString(),
-    });
-    if (error) throw error;
-  }, demoSave);
+  const { error } = await getButterbase().from<ReportRow>("reports").insert({
+    session_id: sessionId,
+    markdown,
+    created_at: new Date().toISOString(),
+  });
+  if (error) throw error;
 }
 
 export async function getReport(sessionId: string): Promise<string | null> {
   const demoGet = () => demoStore().reports.get(sessionId)?.markdown ?? null;
   if (butterbaseInDemoMode()) return demoGet();
-  return liveOrDemo(async () => {
-    const { data, error } = await getButterbase()
-      .from<ReportRow>("reports")
-      .select("*")
-      .eq("session_id", sessionId)
-      .order("created_at", { ascending: false })
-      .limit(1);
+  const { data, error } = await getButterbase()
+    .from<ReportRow>("reports")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return data?.[0]?.markdown ?? null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Industry update subscriptions                                       */
+/* ------------------------------------------------------------------ */
+
+export async function getUpdateSubscription(
+  sessionId: string,
+  accessToken?: string,
+): Promise<UpdateSubscriptionRow | null> {
+  if (butterbaseInDemoMode()) {
+    return demoStore().updateSubscriptions.get(sessionId) ?? null;
+  }
+  const { data, error } = await getButterbase(accessToken)
+    .from<UpdateSubscriptionRow>("update_subscriptions")
+    .select("*")
+    .eq("session_id", sessionId)
+    .limit(1);
+  if (error) throw error;
+  return data?.[0] ?? null;
+}
+
+export async function setUpdateSubscription(
+  row: Pick<
+    UpdateSubscriptionRow,
+    "session_id" | "industry" | "enabled"
+  > &
+    Partial<Pick<UpdateSubscriptionRow, "user_id" | "email" | "cadence">>,
+  accessToken?: string,
+): Promise<UpdateSubscriptionRow> {
+  const now = new Date().toISOString();
+  const next: UpdateSubscriptionRow = {
+    session_id: row.session_id,
+    user_id: row.user_id,
+    email: row.email,
+    industry: row.industry,
+    cadence: row.cadence ?? "weekly",
+    enabled: row.enabled,
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (butterbaseInDemoMode()) {
+    const existing = demoStore().updateSubscriptions.get(row.session_id);
+    const merged = existing
+      ? { ...existing, ...next, created_at: existing.created_at }
+      : next;
+    demoStore().updateSubscriptions.set(row.session_id, merged);
+    return merged;
+  }
+
+  const client = getButterbase(accessToken);
+  const existing = await getUpdateSubscription(row.session_id, accessToken);
+  if (existing) {
+    const { error } = await client
+      .from<UpdateSubscriptionRow>("update_subscriptions")
+      .update({
+        user_id: next.user_id,
+        email: next.email,
+        industry: next.industry,
+        cadence: next.cadence,
+        enabled: next.enabled,
+        updated_at: now,
+      })
+      .eq("session_id", row.session_id);
     if (error) throw error;
-    return data?.[0]?.markdown ?? demoGet();
-  }, demoGet);
+    return { ...existing, ...next, created_at: existing.created_at };
+  }
+
+  const { error } = await client
+    .from<UpdateSubscriptionRow>("update_subscriptions")
+    .insert(next);
+  if (error) throw error;
+  return next;
 }
